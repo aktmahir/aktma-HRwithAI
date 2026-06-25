@@ -1,11 +1,13 @@
 using HrManagement.Application.Abstractions.Ai;
+using HrManagement.Application.PerformanceReviews;
+using MediatR;
 using Microsoft.AspNetCore.Mvc;
 
 namespace HrManagement.Api.Controllers;
 
 [ApiController]
 [Route("api/ai/performance-review-analysis")]
-public sealed class PerformanceReviewAnalysisController(ILlmService llmService) : ControllerBase
+public sealed class PerformanceReviewAnalysisController(ISender sender) : ControllerBase
 {
     [HttpPost]
     [ProducesResponseType(typeof(PerformanceReviewAnalysisResult), StatusCodes.Status200OK)]
@@ -14,12 +16,7 @@ public sealed class PerformanceReviewAnalysisController(ILlmService llmService) 
         [FromBody] AnalyzePerformanceReviewRequest request,
         CancellationToken cancellationToken)
     {
-        if (string.IsNullOrWhiteSpace(request.ReviewText))
-        {
-            return BadRequest("reviewText is required.");
-        }
-
-        var result = await llmService.AnalyzePerformanceReviewAsync(request.ReviewText, cancellationToken);
+        var result = await sender.Send(new AnalyzePerformanceReviewCommand(request.ReviewText), cancellationToken);
         return Ok(result);
     }
 }

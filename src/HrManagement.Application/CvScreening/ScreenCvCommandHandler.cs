@@ -1,4 +1,5 @@
 using HrManagement.Application.Abstractions.Ai;
+using HrManagement.Application.Common.Exceptions;
 using MediatR;
 
 namespace HrManagement.Application.CvScreening;
@@ -10,12 +11,12 @@ public sealed class ScreenCvCommandHandler(ILlmService llmService)
     {
         if (string.IsNullOrWhiteSpace(request.CvText))
         {
-            throw new ArgumentException("CV text is required.", nameof(request));
+            throw new ValidationException("CV text is required.");
         }
 
         if (string.IsNullOrWhiteSpace(request.JobDescription))
         {
-            throw new ArgumentException("Job description is required.", nameof(request));
+            throw new ValidationException("Job description is required.");
         }
 
         return llmService.ScreenCvAsync(request.CvText, request.JobDescription, cancellationToken);

@@ -1,5 +1,7 @@
 using HrManagement.Application.Abstractions.Persistence;
+using HrManagement.Application.LeaveRequests;
 using HrManagement.Domain.Leave;
+using MediatR;
 using Microsoft.AspNetCore.Mvc;
 
 namespace HrManagement.Api.Controllers;
@@ -8,7 +10,7 @@ namespace HrManagement.Api.Controllers;
 [Route("api/leave-requests")]
 public sealed class LeaveRequestsController(
     IRepository<LeaveRequest> leaveRequests,
-    IUnitOfWork unitOfWork) : ControllerBase
+    ISender sender) : ControllerBase
 {
     [HttpGet]
     public async Task<ActionResult<IReadOnlyList<LeaveRequest>>> GetAll(CancellationToken cancellationToken)
@@ -28,9 +30,9 @@ public sealed class LeaveRequestsController(
         [FromBody] CreateLeaveRequest request,
         CancellationToken cancellationToken)
     {
-        var leaveRequest = new LeaveRequest(request.EmployeeId, request.StartDate, request.EndDate, request.Reason);
-        await leaveRequests.AddAsync(leaveRequest, cancellationToken);
-        await unitOfWork.SaveChangesAsync(cancellationToken);
+        var leaveRequest = await sender.Send(
+            new CreateLeaveRequestCommand(request.EmployeeId, request.StartDate, request.EndDate, request.Reason),
+            cancellationToken);
 
         return CreatedAtAction(nameof(GetById), new { id = leaveRequest.Id }, leaveRequest);
     }
@@ -41,14 +43,7 @@ public sealed class LeaveRequestsController(
         [FromBody] ReviewLeaveRequest request,
         CancellationToken cancellationToken)
     {
-        var leaveRequest = await leaveRequests.GetByIdAsync(id, cancellationToken);
-        if (leaveRequest is null)
-        {
-            return NotFound();
-        }
-
-        leaveRequest.Approve(request.ReviewerEmployeeId, request.Notes);
-        await unitOfWork.SaveChangesAsync(cancellationToken);
+        await sender.Send(new ApproveLeaveRequestCommand(id, request.ReviewerEmployeeId, request.Notes), cancellationToken);
         return NoContent();
     }
 
@@ -58,14 +53,7 @@ public sealed class LeaveRequestsController(
         [FromBody] ReviewLeaveRequest request,
         CancellationToken cancellationToken)
     {
-        var leaveRequest = await leaveRequests.GetByIdAsync(id, cancellationToken);
-        if (leaveRequest is null)
-        {
-            return NotFound();
-        }
-
-        leaveRequest.Reject(request.ReviewerEmployeeId, request.Notes);
-        await unitOfWork.SaveChangesAsync(cancellationToken);
+        await sender.Send(new RejectLeaveRequestCommand(id, request.ReviewerEmployeeId, request.Notes), cancellationToken);
         return NoContent();
     }
 }

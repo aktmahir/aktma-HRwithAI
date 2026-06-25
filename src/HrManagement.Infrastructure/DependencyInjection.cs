@@ -17,6 +17,8 @@ public static class DependencyInjection
         services.AddDbContext<HrDbContext>(options =>
             options.UseNpgsql(configuration.GetConnectionString("HrDatabase")));
 
+        services.Configure<DatabaseOptions>(configuration.GetSection(DatabaseOptions.SectionName));
+        services.AddSingleton<DatabaseInitializer>();
         services.AddScoped(typeof(IRepository<>), typeof(EfRepository<>));
         services.AddScoped<IUnitOfWork, UnitOfWork>();
 

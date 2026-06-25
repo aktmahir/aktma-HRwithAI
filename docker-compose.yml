@@ -7,6 +7,7 @@ services:
       ASPNETCORE_ENVIRONMENT: Development
       ASPNETCORE_URLS: http://+:8080
       ConnectionStrings__HrDatabase: Host=db;Port=5432;Database=hr_management;Username=hr_user;Password=hr_password
+      Database__ApplyMigrationsOnStartup: "true"
       Llm__BaseUrl: http://ollama:11434
       Llm__Model: llama3
       Llm__GeneratePath: /api/generate
