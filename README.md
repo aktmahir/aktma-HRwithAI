@@ -44,3 +44,155 @@ POST http://localhost:11434/api/generate
 ```
 
 Use `Llm:BaseUrl`, `Llm:Model`, and `Llm:GeneratePath` to swap LM Studio, Ollama, or another local provider without changing Application code.
+
+## Getting Started
+
+### Prerequisites
+
+- .NET 8 SDK
+- Docker & Docker Compose (for containerized run)
+- PostgreSQL (if running without Docker)
+
+### Local Development (with Docker Compose)
+
+1. Copy the example environment file and fill in your secrets:
+   ```bash
+   cp .env.example .env
+   # edit .env with strong passwords
+   ```
+2. Start the stack:
+   ```bash
+   docker-compose up -d --build
+   ```
+3. The API will be available at `http://localhost:8080`.
+   Swagger UI (Development only): `http://localhost:8080/swagger`
+   Health check: `http://localhost:8080/health`
+
+### Local Development (without Docker)
+
+1. Ensure PostgreSQL is running and create a database `hr_management`.
+2. Set environment variables (or use `dotnet user-secrets`):
+   ```bash
+   export ConnectionStrings__HrDatabase="Host=localhost;Port=5432;Database=hr_management;Username=hr_user;Password=your_password"
+   export Llm__BaseUrl=http://localhost:11434
+   export Llm__Model=llama3
+   export Llm__GeneratePath=/api/generate
+   export ASPNETCORE_ENVIRONMENT=Development
+   ```
+3. Run the API:
+   ```bash
+   dotnet run --project src/HrManagement.Api/HrManagement.Api.csproj
+   ```
+
+## Configuration
+
+All settings are driven by environment variables (or `appsettings.json`/`appsettings.{Environment}.json`). The following are the key variables:
+
+| Variable | Description | Default |
+|----------|-------------|---------|
+| `ASPNETCORE_ENVIRONMENT` | Environment name (Development, Staging, Production) | Development |
+| `ASPNETCORE_URLS` | URLs Kestrel listens on | `http://+:8080` |
+| `ConnectionStrings__HrDatabase` | PostgreSQL connection string | *required* |
+| `Database__ApplyMigrationsOnStartup` | Run EF Core migrations on startup | `false` |
+| `Llm__BaseUrl` | Base URL of the LLM provider (Ollama) | `http://ollama:11434` |
+| `Llm__Model` | Model name | `llama3` |
+| `Llm__GeneratePath` | Generate endpoint path | `/api/generate` |
+| `AllowedOrigins` | Comma-separated CORS origins | `http://localhost:3000` |
+| `IpRateLimiting__*` | Rate limiting rules (see `appsettings.json`) | *configured* |
+
+**Never commit `.env` or any file containing real secrets.** Use a secret manager (GitHub Secrets, Azure Key Vault, AWS Secrets Manager, HashiCorp Vault) in production.
+
+## Production Deployment
+
+### Docker Image
+
+The `Dockerfile` uses a multi-stage build, runs as non-root user (`appuser`), and includes a health check. Build and push:
+
+```bash
+docker build -t your-registry/hr-management-api:latest -f src/HrManagement.Api/Dockerfile .
+docker push your-registry/hr-management-api:latest
+```
+
+### Kubernetes / Container Orchestration
+
+- Use the provided `docker-compose.yml` as a reference for service definitions.
+- Set `ASPNETCORE_ENVIRONMENT=Production`.
+- Provide secrets via your platform's secret store (Kubernetes Secrets, Docker Swarm secrets, etc.).
+- Enable TLS termination at ingress/controller (NGINX, Traefik, Azure Application Gateway, etc.).
+- Configure resource limits/requests (see `deploy.resources` in compose file).
+- Run database migrations as an init container or a separate job (`dotnet ef database update`).
+
+### Health Checks & Monitoring
+
+- Liveness: `GET /health` (checks DB and LLM connectivity).
+- Readiness: `GET /ready` (app is ready to accept traffic).
+- Metrics: `GET /metrics` exposes basic Prometheus metrics (memory, CPU). Extend with OpenTelemetry for full instrumentation.
+- Logging: Serilog JSON format to `Logs/log-.json` (compact JSON) and console, 14-day rotation. Forward to ELK/Loki/Seq via log forwarder.
+
+### Database Backup & Restore
+
+- **Automated backup**: Enable the backup profile: `docker-compose --profile backup up -d` runs a one-off backup to `/backups`.
+- **Manual backup**: 
+  ```bash
+  docker exec $(docker ps -q -f name=hr_db) pg_dump -U hr_user hr_management | gzip > backup_$(date +%Y%m%d).sql.gz
+  ```
+- **Restore**:
+  ```bash
+  zcat backup_20240101.sql.gz | docker exec -i $(docker ps -q -f name=hr_db) psql -U hr_user hr_management
+  ```
+- **Cloud storage**: Set `BACKUP_S3_BUCKET` in `.env` to auto-upload backups.
+- **Quarterly restore test**: Run restore procedure monthly (documented above).
+
+## CI/CD Pipeline
+
+A GitHub Actions workflow (`.github/workflows/ci.yml`) runs on every push/PR:
+
+1. **Build & Test** – Restores, builds, runs unit tests, and checks code formatting.
+2. **Security Scan** – Trivy vulnerability scanner (filesystem + Docker image) with GitHub Security tab integration.
+3. **Docker** – Builds and pushes multi-arch image to GHCR with SHA tag (registry retention keeps last 5).
+4. **Deploy Staging** – Placeholder for staging deployment.
+5. **Deploy Production** – Placeholder for production deployment (requires manual approval).
+
+### Rollback
+
+Images are tagged by commit SHA for easy rollback:
+
+```bash
+# View recent commits
+git log --oneline -5
+
+# Rollback to specific version
+./rollback.sh abc123def456
+
+# Or manually
+docker pull ghcr.io/ORG/hr-management-api:abc123def456
+docker-compose up -d api=ghcr.io/ORG/hr-management-api:abc123def456
+```
+
+Configure the following repository secrets for the workflow:
+- `GITHUB_TOKEN` (automatically provided) for pushing to GHCR.
+- Any additional secrets needed for your deployment steps (kubeconfig, cloud credentials, etc.).
+
+## Security Hardening (Already Applied)
+
+- Non-root container user (`appuser`).
+- Health checks in Dockerfile and Compose (`/ready` and `/health` endpoints).
+- Resource limits in Compose.
+- Strict CORS (whitelisted origins, specific methods/headers).
+- Rate limiting (6 req/10s per IP) via `AspNetCoreRateLimit`.
+- Security headers: HSTS, CSP, X-Frame-Options, Referrer-Policy.
+- Response compression (Brotli/Gzip).
+- TLS termination via Traefik reverse proxy with Let's Encrypt.
+- Secrets out of source control (`.env` ignored).
+- Automated dependency scanning (Dependabot / GitHub code scanning) – enable in repo settings.
+
+## Extending the API
+
+- Add new endpoints in `src/HrManagement.Api/Controllers/`.
+- Business logic goes in `src/HrManagement.Application/`.
+- Domain entities in `src/HrManagement.Domain/`.
+- Infrastructure implementations (EF Core, LLM client) in `src/HrManagement.Infrastructure/`.
+
+## License
+
+MIT

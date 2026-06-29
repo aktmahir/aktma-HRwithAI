@@ -1,40 +1,177 @@
+version: "3.8"
+
 services:
+  traefik:
+    image: traefik:v3.0
+    command:
+      - "--providers.docker=true"
+      - "--providers.docker.exposedbydefault=false"
+      - "--entrypoints.web.address=:80"
+      - "--entrypoints.websecure.address=:443"
+      - "--certificatesresolvers.myresolver.acme.httpchallenge=true"
+      - "--certificatesresolvers.myresolver.acme.httpchallenge.entrypoint=web"
+      - "--certificatesresolvers.myresolver.acme.email=${ACME_EMAIL}"
+      - "--certificatesresolvers.myresolver.acme.storage=/letsencrypt/acme.json"
+      - "--accesslog=true"
+      - "--log.level=INFO"
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - "/var/run/docker.sock:/var/run/docker.sock:ro"
+      - "traefik_data:/letsencrypt"
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          cpus: "0.5"
+          memory: 128M
+
+  migrations:
+    build:
+      context: .
+      dockerfile: src/HrManagement.Api/Dockerfile
+    env_file:
+      - .env
+    environment:
+      ASPNETCORE_ENVIRONMENT: Production
+      ASPNETCORE_URLS: http://+:8080
+      ConnectionStrings__HrDatabase: Host=db;Port=5432;Database=hr_management;Username=hr_user;Password=${POSTGRES_PASSWORD}
+      Database__ApplyMigrationsOnStartup: "true"
+      RunMigrationsOnly: "true"
+    depends_on:
+      db:
+        condition: service_healthy
+    restart: "no"
+    deploy:
+      resources:
+        limits:
+          cpus: "0.5"
+          memory: 256M
+
   api:
     build:
       context: .
       dockerfile: src/HrManagement.Api/Dockerfile
+    env_file:
+      - .env
     environment:
-      ASPNETCORE_ENVIRONMENT: Development
+      ASPNETCORE_ENVIRONMENT: Production
       ASPNETCORE_URLS: http://+:8080
-      ConnectionStrings__HrDatabase: Host=db;Port=5432;Database=hr_management;Username=hr_user;Password=hr_password
-      Database__ApplyMigrationsOnStartup: "true"
+      ConnectionStrings__HrDatabase: Host=db;Port=5432;Database=hr_management;Username=hr_user;Password=${POSTGRES_PASSWORD}
+      Database__ApplyMigrationsOnStartup: "false"
       Llm__BaseUrl: http://ollama:11434
       Llm__Model: llama3
       Llm__GeneratePath: /api/generate
-    ports:
-      - "8080:8080"
+    expose:
+      - "8080"
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.api.rule=Host(`${DOMAIN}`)"
+      - "traefik.http.routers.api.entrypoints=websecure"
+      - "traefik.http.routers.api.tls.certresolver=myresolver"
+      - "traefik.http.routers.api-http.rule=Host(`${DOMAIN}`)"
+      - "traefik.http.routers.api-http.entrypoints=web"
+      - "traefik.http.routers.api-http.middlewares=https-redirect"
+      - "traefik.http.middlewares.https-redirect.redirectscheme.scheme=https"
+      - "traefik.http.middlewares.hsts-header.headers.stsSeconds=31536000"
+      - "traefik.http.middlewares.hsts-header.headers.stsIncludeSubdomains=true"
+      - "traefik.http.middlewares.hsts-header.headers.stsPreload=true"
+      - "traefik.http.routers.api.middlewares=hsts-header"
     depends_on:
-      - db
-      - ollama
+      db:
+        condition: service_healthy
+      ollama:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/ready"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          cpus: "1.0"
+          memory: 512M
+        reservations:
+          cpus: "0.5"
+          memory: 256M
 
   db:
     image: postgres:16-alpine
+    env_file:
+      - .env
     environment:
       POSTGRES_DB: hr_management
       POSTGRES_USER: hr_user
-      POSTGRES_PASSWORD: hr_password
-    ports:
-      - "5432:5432"
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
     volumes:
       - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          cpus: "1.0"
+          memory: 512M
+        reservations:
+          cpus: "0.5"
+          memory: 256M
 
   ollama:
     image: ollama/ollama:latest
-    ports:
-      - "11434:11434"
     volumes:
       - ollama_data:/root/.ollama
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:11434/api/version"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          cpus: "2.0"
+          memory: 2G
+        reservations:
+          cpus: "1.0"
+          memory: 1G
+
+  # Backup service - use `docker-compose --profile backup up -d` to run
+# Or schedule externally via: docker exec hr_db pg_dump -U hr_user hr_management | gzip > backup.sql.gz
+backup:
+    image: postgres:16-alpine
+    env_file:
+      - .env
+    environment:
+      - PGHOST=db
+      - PGDATABASE=hr_management
+      - PGUSER=hr_user
+      - PGPASSWORD=${POSTGRES_PASSWORD}
+    volumes:
+      - postgres_backup_data:/backups
+      - ./backup-pg.sh:/usr/local/bin/backup-pg.sh:ro
+    command: ["/bin/sh", "-c", "apk add --no-cache postgresql-client && pg_dump -h db -U hr_user hr_management | gzip > /backups/hr_management_$(date +%Y%m%d_%H%M%S).sql.gz && sleep 3600"]
+    depends_on:
+      db:
+        condition: service_healthy
+    restart: "no"
+    profiles: ["backup"]
+    deploy:
+      resources:
+        limits:
+          cpus: "0.5"
+          memory: 128M
 
 volumes:
   postgres_data:
   ollama_data:
+  traefik_data:
+  postgres_backup_data:
