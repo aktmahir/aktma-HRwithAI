@@ -2,12 +2,14 @@ using HrManagement.Application.Abstractions.Persistence;
 using HrManagement.Application.LeaveRequests;
 using HrManagement.Domain.Leave;
 using MediatR;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
 namespace HrManagement.Api.Controllers;
 
 [ApiController]
 [Route("api/leave-requests")]
+[Authorize]
 public sealed class LeaveRequestsController(
     IRepository<LeaveRequest> leaveRequests,
     ISender sender) : ControllerBase

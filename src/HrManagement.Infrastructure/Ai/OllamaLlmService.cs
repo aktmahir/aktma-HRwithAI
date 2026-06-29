@@ -15,25 +15,23 @@ public sealed class OllamaLlmService(HttpClient httpClient, IOptions<LlmOptions>
         string jobDescription,
         CancellationToken cancellationToken = default)
     {
-        var prompt = """
-            You are an expert HR technical recruiter.
-            Return only valid JSON matching this schema:
-            {
-              "matchPercentage": 0,
-              "matchingSkills": ["skill"],
-              "missingSkills": ["skill"],
-              "summary": "short assessment",
-              "recommendation": "Interview | Hold | Reject"
-            }
+        var prompt = $@"
+You are an expert HR technical recruiter.
+Return only valid JSON matching this schema:
+{{
+  ""matchPercentage"": 0,
+  ""matchingSkills"": [""skill""],
+  ""missingSkills"": [""skill""],
+  ""summary"": ""short assessment"",
+  ""recommendation"": ""Interview | Hold | Reject""
+}}
 
-            Job description:
-            {{JOB_DESCRIPTION}}
+Job description:
+{jobDescription}
 
-            Candidate CV:
-            {{CV_TEXT}}
-            """
-            .Replace("{{JOB_DESCRIPTION}}", jobDescription, StringComparison.Ordinal)
-            .Replace("{{CV_TEXT}}", cvText, StringComparison.Ordinal);
+Candidate CV:
+{cvText}
+";
 
         return await GenerateStructuredResponseAsync<CvScreeningResult>(prompt, cancellationToken);
     }
@@ -42,20 +40,19 @@ public sealed class OllamaLlmService(HttpClient httpClient, IOptions<LlmOptions>
         string reviewText,
         CancellationToken cancellationToken = default)
     {
-        var prompt = """
-            You are an HR performance review analyst.
-            Return only valid JSON matching this schema:
-            {
-              "sentiment": "Positive | Neutral | Negative | Mixed",
-              "strengths": ["strength"],
-              "weaknesses": ["weakness"],
-              "summary": "concise summary"
-            }
+        var prompt = $@"
+You are an HR performance review analyst.
+Return only valid JSON matching this schema:
+{{
+  ""sentiment"": ""Positive | Neutral | Negative | Mixed"",
+  ""strengths"": [""strength""],
+  ""weaknesses"": [""weakness""],
+  ""summary"": ""concise summary""
+}}
 
-            Peer review text:
-            {{REVIEW_TEXT}}
-            """
-            .Replace("{{REVIEW_TEXT}}", reviewText, StringComparison.Ordinal);
+Peer review text:
+{reviewText}
+";
 
         return await GenerateStructuredResponseAsync<PerformanceReviewAnalysisResult>(prompt, cancellationToken);
     }
@@ -65,6 +62,7 @@ public sealed class OllamaLlmService(HttpClient httpClient, IOptions<LlmOptions>
         CancellationToken cancellationToken)
     {
         var request = new OllamaGenerateRequest(_options.Model, prompt, Stream: false, Format: "json");
+
         using var response = await httpClient.PostAsJsonAsync(_options.GeneratePath, request, SerializerOptions, cancellationToken);
         response.EnsureSuccessStatusCode();
 

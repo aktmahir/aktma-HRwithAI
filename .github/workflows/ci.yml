@@ -127,10 +127,30 @@ jobs:
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     environment: staging
     steps:
-      - name: Deploy to staging (placeholder)
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up kubectl
+        uses: azure/setup-kubectl@v4
+        with:
+          version: 'v1.30.0'
+          kubeconfig: '${{ secrets.KUBECONFIG_STAGING }}'
+
+      - name: Deploy to staging (Kubernetes)
         run: |
-          echo "Deploy to staging environment (e.g., Kubernetes, Azure Container Apps, etc.)"
-          # Add your deployment commands here
+          kubectl apply -f k8s/namespace-staging.yaml --namespace=hr-management-staging || true
+          kubectl set image deployment/hr-management-api api=${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ github.sha }} --namespace=hr-management-staging || \
+            kubectl apply -f k8s/deployment.yaml --namespace=hr-management-staging
+
+      - name: Run migration job
+        run: |
+          kubectl wait --for=condition=ready pod -l app=hr-management-api --namespace=hr-management-staging --timeout=60s
+          kubectl run hrmigration-${{ github.sha }} --image=${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ github.sha }} --restart=Never --namespace=hr-management-staging -- \
+            --run-migrations-only || true
+
+      - name: Verify deployment
+        run: |
+          kubectl rollout status deployment/hr-management-api --namespace=hr-management-staging --timeout=120s
 
   deploy-production:
     needs: deploy-staging
@@ -138,7 +158,26 @@ jobs:
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     environment: production
     steps:
-      - name: Deploy to production (placeholder)
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up kubectl
+        uses: azure/setup-kubectl@v4
+        with:
+          version: 'v1.30.0'
+          kubeconfig: '${{ secrets.KUBECONFIG_PROD }}'
+
+      - name: Deploy to production (Kubernetes)
         run: |
-          echo "Deploy to production environment"
-          # Add your production deployment commands here
+          kubectl apply -f k8s/namespace-prod.yaml --namespace=hr-management-prod || true
+          kubectl set image deployment/hr-management-api api=${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ github.sha }} --namespace=hr-management-prod --record || \
+            kubectl apply -f k8s/deployment.yaml --namespace=hr-management-prod --record
+
+      - name: Run migration job
+        run: |
+          kubectl run hrmigration-${{ github.sha }} --image=${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ github.sha }} --restart=Never --namespace=hr-management-prod -- \
+            --run-migrations-only || true
+
+      - name: Verify deployment
+        run: |
+          kubectl rollout status deployment/hr-management-api --namespace=hr-management-prod --timeout=120s

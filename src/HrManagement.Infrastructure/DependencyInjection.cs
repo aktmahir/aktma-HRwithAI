@@ -5,6 +5,8 @@ using HrManagement.Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+using Polly;
+using Polly.Extensions.Http;
 
 namespace HrManagement.Infrastructure;
 
@@ -28,8 +30,19 @@ public static class DependencyInjection
             var baseUrl = configuration["Llm:BaseUrl"] ?? "http://localhost:11434";
             client.BaseAddress = new Uri(baseUrl);
             client.Timeout = TimeSpan.FromMinutes(3);
-        });
+        })
+        .AddPolicyHandler(GetRetryPolicy());
 
         return services;
+    }
+
+    private static IAsyncPolicy<HttpResponseMessage> GetRetryPolicy()
+    {
+        return HttpPolicyExtensions
+            .HandleTransientHttpError()
+            .OrResult(msg => msg.StatusCode == System.Net.HttpStatusCode.TooManyRequests)
+            .WaitAndRetryAsync(
+                retryCount: 3,
+                sleepDurationProvider: retryAttempt => TimeSpan.FromSeconds(Math.Pow(2, retryAttempt)));
     }
 }

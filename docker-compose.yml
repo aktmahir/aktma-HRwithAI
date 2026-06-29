@@ -36,7 +36,7 @@ services:
     environment:
       ASPNETCORE_ENVIRONMENT: Production
       ASPNETCORE_URLS: http://+:8080
-      ConnectionStrings__HrDatabase: Host=db;Port=5432;Database=hr_management;Username=hr_user;Password=${POSTGRES_PASSWORD}
+      ConnectionStrings__HrDatabase: Host=db;Port=5432;Database=hr_management;Username=hr_user;Password=${POSTGRES_PASSWORD};Pooling=true;Minimum Pool Size=5;Maximum Pool Size=50
       Database__ApplyMigrationsOnStartup: "true"
       RunMigrationsOnly: "true"
     depends_on:
@@ -58,7 +58,7 @@ services:
     environment:
       ASPNETCORE_ENVIRONMENT: Production
       ASPNETCORE_URLS: http://+:8080
-      ConnectionStrings__HrDatabase: Host=db;Port=5432;Database=hr_management;Username=hr_user;Password=${POSTGRES_PASSWORD}
+      ConnectionStrings__HrDatabase: Host=db;Port=5432;Database=hr_management;Username=hr_user;Password=${POSTGRES_PASSWORD};Pooling=true;Minimum Pool Size=5;Maximum Pool Size=50
       Database__ApplyMigrationsOnStartup: "false"
       Llm__BaseUrl: http://ollama:11434
       Llm__Model: llama3
@@ -145,8 +145,8 @@ services:
           memory: 1G
 
   # Backup service - use `docker-compose --profile backup up -d` to run
-# Or schedule externally via: docker exec hr_db pg_dump -U hr_user hr_management | gzip > backup.sql.gz
-backup:
+  # Or schedule externally via: docker exec hr_db pg_dump -U hr_user hr_management | gzip > backup.sql.gz
+  backup:
     image: postgres:16-alpine
     env_file:
       - .env
@@ -155,10 +155,11 @@ backup:
       - PGDATABASE=hr_management
       - PGUSER=hr_user
       - PGPASSWORD=${POSTGRES_PASSWORD}
+      - VALIDATE_RESTORE=true
     volumes:
       - postgres_backup_data:/backups
       - ./backup-pg.sh:/usr/local/bin/backup-pg.sh:ro
-    command: ["/bin/sh", "-c", "apk add --no-cache postgresql-client && pg_dump -h db -U hr_user hr_management | gzip > /backups/hr_management_$(date +%Y%m%d_%H%M%S).sql.gz && sleep 3600"]
+    command: ["/bin/sh", "-c", "apk add --no-cache postgresql-client && /usr/local/bin/backup-pg.sh && sleep 3600"]
     depends_on:
       db:
         condition: service_healthy

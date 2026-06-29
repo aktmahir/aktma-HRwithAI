@@ -1,7 +1,7 @@
 # Use alpine for smaller base image (~100MB vs ~250MB)
 FROM mcr.microsoft.com/dotnet/aspnet:8.0-alpine AS base
-# Install curl for healthcheck and ca-certificates for HTTPS
-RUN apk add --no-cache curl ca-certificates
+# Install curl for healthcheck, ca-certificates for HTTPS, and tzdata for time zone support
+RUN apk add --no-cache curl ca-certificates tzdata
 WORKDIR /app
 # Create non-root user
 RUN addgroup -g 10001 -S appgroup && adduser -u 10001 -S -G appgroup appuser

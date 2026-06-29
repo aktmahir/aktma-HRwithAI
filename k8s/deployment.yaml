@@ -1,0 +1,52 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: hr-management-api
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: hr-management-api
+  template:
+    metadata:
+      labels:
+        app: hr-management-api
+    spec:
+      containers:
+        - name: api
+          image: ghcr.io/hr-management-api:latest
+          ports:
+            - containerPort: 8080
+          env:
+            - name: ASPNETCORE_ENVIRONMENT
+              value: "Production"
+            - name: ASPNETCORE_URLS
+              value: "http://+:8080"
+            - name: ConnectionStrings__HrDatabase
+              valueFrom:
+                secretKeyRef:
+                  name: hr-management-secrets
+                  key: connection-string
+            - name: Llm__BaseUrl
+              value: "http://ollama-service:11434"
+          readinessProbe:
+            httpGet:
+              path: /ready
+              port: 8080
+            initialDelaySeconds: 30
+            periodSeconds: 10
+            timeoutSeconds: 5
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 8080
+            initialDelaySeconds: 60
+            periodSeconds: 30
+            timeoutSeconds: 10
+          resources:
+            limits:
+              cpu: "1"
+              memory: "512Mi"
+            requests:
+              cpu: "0.5"
+              memory: "256Mi"

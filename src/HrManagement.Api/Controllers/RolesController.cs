@@ -1,11 +1,13 @@
 using HrManagement.Application.Abstractions.Persistence;
 using HrManagement.Domain.Employees;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
 namespace HrManagement.Api.Controllers;
 
 [ApiController]
 [Route("api/roles")]
+[Authorize]
 public sealed class RolesController(
     IRepository<Role> roles,
     IUnitOfWork unitOfWork) : ControllerBase

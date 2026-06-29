@@ -1,11 +1,13 @@
 using HrManagement.Application.Abstractions.Persistence;
 using HrManagement.Domain.Employees;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
 namespace HrManagement.Api.Controllers;
 
 [ApiController]
 [Route("api/departments")]
+[Authorize]
 public sealed class DepartmentsController(
     IRepository<Department> departments,
     IUnitOfWork unitOfWork) : ControllerBase

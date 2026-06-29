@@ -4,6 +4,7 @@ using HrManagement.Infrastructure;
 using Microsoft.AspNetCore.ResponseCompression;
 using Microsoft.AspNetCore.Mvc.Versioning;
 using Microsoft.Extensions.Diagnostics.HealthChecks;
+using Microsoft.IdentityModel.Tokens;
 using Serilog;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -36,6 +37,8 @@ builder.Services.AddApiVersioning(options =>
 });
 
 // CORS - strict whitelist, specific methods and headers only
+builder.Services.Configure<HrManagement.Api.JwtOptions>(builder.Configuration.GetSection("Jwt"));
+
 var allowedOriginsCsv = builder.Configuration["AllowedOrigins"] ?? "";
 var allowedOrigins = allowedOriginsCsv.Split(',', StringSplitOptions.RemoveEmptyEntries)
                                     .Select(o => o.Trim())
@@ -43,11 +46,11 @@ var allowedOrigins = allowedOriginsCsv.Split(',', StringSplitOptions.RemoveEmpty
 
 builder.Services.AddCors(options =>
 {
-    options.AddPolicy("StrictCors", builder =>
+    options.AddPolicy("StrictCors", corsBuilder =>
     {
         if (allowedOrigins.Length > 0)
         {
-            builder.WithOrigins(allowedOrigins)
+            corsBuilder.WithOrigins(allowedOrigins)
                    .WithMethods("GET", "POST", "PUT", "DELETE", "OPTIONS")
                    .WithHeaders("Content-Type", "Authorization", "X-Requested-With", "Accept", "Origin")
                    .AllowCredentials()
@@ -56,13 +59,39 @@ builder.Services.AddCors(options =>
     });
 });
 
+// Authentication - JWT Bearer
+builder.Services.AddAuthentication("Bearer")
+    .AddJwtBearer("Bearer", options =>
+    {
+        var jwtOptions = builder.Configuration.GetSection("Jwt");
+        options.TokenValidationParameters = new TokenValidationParameters
+        {
+            ValidateIssuer = true,
+            ValidateAudience = true,
+            ValidateLifetime = true,
+            ValidateIssuerSigningKey = true,
+            ValidIssuer = jwtOptions["Issuer"],
+            ValidAudience = jwtOptions["Audience"],
+            IssuerSigningKey = new SymmetricSecurityKey(
+                System.Text.Encoding.UTF8.GetBytes(jwtOptions["Secret"] ?? string.Empty))
+        };
+    });
+
+builder.Services.AddAuthorization();
+
 // Health Checks
 var dbConnectionString = builder.Configuration.GetConnectionString("HrDatabase") ?? string.Empty;
 builder.Services.AddHealthChecks()
     .AddCheck("self", () => HealthCheckResult.Healthy())
     .AddNpgSql(dbConnectionString, name: "postgresql")
-    .AddUrlGroup(new Uri(builder.Configuration["Llm:BaseUrl"] + "/api/version"), name: "llm-check")
     .AddCheck("ready", () => HealthCheckResult.Healthy(), tags: new[] { "ready" });
+
+var llmBaseUrl = builder.Configuration["Llm:BaseUrl"];
+if (!string.IsNullOrEmpty(llmBaseUrl))
+{
+    builder.Services.AddHealthChecks()
+        .AddUrlGroup(new Uri($"{llmBaseUrl}/api/version"), name: "llm-check", tags: new[] { "llm" });
+}
 
 // Rate Limiting
 builder.Services.AddMemoryCache();
@@ -129,16 +158,26 @@ app.Use(async (ctx, next) =>
 // CORS - strict policy
 app.UseCors("StrictCors");
 
-// Authorization (if any)
+// Authentication & Authorization
+app.UseAuthentication();
 app.UseAuthorization();
 
-// Health checks (liveness - checks DB and LLM)
-app.MapHealthChecks("/health");
+// Health checks (liveness - basic app + DB check only)
+app.MapHealthChecks("/health", new Microsoft.AspNetCore.Diagnostics.HealthChecks.HealthCheckOptions
+{
+    Predicate = check => check.Name == "self" || check.Name == "postgresql"
+});
 
 // Readiness probe (internal only - app ready to accept traffic)
 app.MapHealthChecks("/ready", new Microsoft.AspNetCore.Diagnostics.HealthChecks.HealthCheckOptions
 {
     Predicate = check => check.Tags.Contains("ready")
+});
+
+// LLM health check (separate endpoint to avoid blocking startup)
+app.MapHealthChecks("/health/llm", new Microsoft.AspNetCore.Diagnostics.HealthChecks.HealthCheckOptions
+{
+    Predicate = check => check.Tags.Contains("llm")
 });
 
 // Simple Prometheus metrics endpoint

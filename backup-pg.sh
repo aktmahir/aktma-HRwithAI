@@ -12,6 +12,29 @@ pg_dump -h "${POSTGRES_HOST:-db}" -U "${POSTGRES_USER}" -d "${POSTGRES_DB}" | gz
 
 echo "Backup created: $BACKUP_FILE"
 
+# Validate backup integrity
+echo "Validating backup integrity..."
+gzip -t "$BACKUP_FILE" || {
+    echo "ERROR: Backup validation failed - corrupted backup file"
+    rm -f "$BACKUP_FILE"
+    exit 1
+}
+
+# Test restore to temporary database (optional validation)
+if [ -n "$VALIDATE_RESTORE" ]; then
+    echo "Testing restore to temporary database..."
+    TEST_DB="hr_management_restore_test_$$"
+    createdb -h "${POSTGRES_HOST:-db}" -U "${POSTGRES_USER}" "$TEST_DB" 2>/dev/null || true
+    zcat "$BACKUP_FILE" | psql -h "${POSTGRES_HOST:-db}" -U "${POSTGRES_USER}" -d "$TEST_DB" 2>/dev/null || {
+        echo "ERROR: Backup restore test failed"
+        dropdb -h "${POSTGRES_HOST:-db}" -U "${POSTGRES_USER}" "$TEST_DB" 2>/dev/null || true
+        rm -f "$BACKUP_FILE"
+        exit 1
+    }
+    dropdb -h "${POSTGRES_HOST:-db}" -U "${POSTGRES_USER}" "$TEST_DB" 2>/dev/null || true
+    echo "Restore validation passed"
+fi
+
 # Optional: upload to cloud storage if BACKUP_S3_BUCKET is set
 if [ -n "$BACKUP_S3_BUCKET" ]; then
     echo "Uploading to S3..."
