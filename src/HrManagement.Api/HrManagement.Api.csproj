@@ -28,7 +28,7 @@
     <!-- Health Checks Uris -->
     <PackageReference Include="AspNetCore.HealthChecks.Uris" Version="7.0.0" />
     <!-- Rate Limiting -->
-    <PackageReference Include="AspNetCoreRateLimit" Version="4.0.1" />
+    <PackageReference Include="AspNetCoreRateLimit" Version="5.0.0" />
     <!-- Serilog -->
     <PackageReference Include="Serilog.AspNetCore" Version="8.0.1" />
     <PackageReference Include="Serilog.Sinks.Console" Version="5.0.1" />
