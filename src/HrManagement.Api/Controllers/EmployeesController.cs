@@ -1,3 +1,4 @@
+using HrManagement.Api.Logging;
 using HrManagement.Application.Abstractions.Persistence;
 using HrManagement.Domain.Employees;
 using Microsoft.AspNetCore.Authorization;
@@ -7,10 +8,11 @@ namespace HrManagement.Api.Controllers;
 
 [ApiController]
 [Route("api/employees")]
-[Authorize]
+[Authorize(Policy = "HrAdmin")]
 public sealed class EmployeesController(
     IRepository<Employee> employees,
-    IUnitOfWork unitOfWork) : ControllerBase
+    IUnitOfWork unitOfWork,
+    AuditLogger auditLogger) : ControllerBase
 {
     [HttpGet]
     public async Task<ActionResult<IReadOnlyList<Employee>>> GetAll(CancellationToken cancellationToken)
@@ -40,6 +42,7 @@ public sealed class EmployeesController(
         await employees.AddAsync(employee, cancellationToken);
         await unitOfWork.SaveChangesAsync(cancellationToken);
 
+        auditLogger.LogChange("Create", "Employee", User.Identity?.Name, $"Created employee {employee.Id}");
         return CreatedAtAction(nameof(GetById), new { id = employee.Id }, employee);
     }
 
@@ -58,6 +61,8 @@ public sealed class EmployeesController(
         employee.AssignRole(request.RoleId);
 
         await unitOfWork.SaveChangesAsync(cancellationToken);
+
+        auditLogger.LogChange("Update", "Employee", User.Identity?.Name, $"Updated employee {employee.Id}");
         return NoContent();
     }
 
@@ -72,6 +77,8 @@ public sealed class EmployeesController(
 
         employees.Remove(employee);
         await unitOfWork.SaveChangesAsync(cancellationToken);
+
+        auditLogger.LogChange("Delete", "Employee", User.Identity?.Name, $"Deleted employee {employee.Id}");
         return NoContent();
     }
 }

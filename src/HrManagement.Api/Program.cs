@@ -6,6 +6,7 @@ using Microsoft.AspNetCore.Mvc.Versioning;
 using Microsoft.Extensions.Diagnostics.HealthChecks;
 using Microsoft.IdentityModel.Tokens;
 using Serilog;
+using Serilog.Context;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -39,6 +40,17 @@ builder.Services.AddApiVersioning(options =>
 // CORS - strict whitelist, specific methods and headers only
 builder.Services.Configure<HrManagement.Api.JwtOptions>(builder.Configuration.GetSection("Jwt"));
 
+var jwtOptions = builder.Configuration.GetSection("Jwt").Get<HrManagement.Api.JwtOptions>() ?? new HrManagement.Api.JwtOptions();
+if (string.IsNullOrWhiteSpace(jwtOptions.Secret) || string.IsNullOrWhiteSpace(jwtOptions.Issuer) || string.IsNullOrWhiteSpace(jwtOptions.Audience))
+{
+    throw new InvalidOperationException("JWT configuration is incomplete. Set Jwt:Secret, Jwt:Issuer, and Jwt:Audience before starting the API.");
+}
+
+if (builder.Environment.IsProduction() && (builder.Configuration["Llm:BaseUrl"] ?? string.Empty).Contains("yourdomain", StringComparison.OrdinalIgnoreCase))
+{
+    throw new InvalidOperationException("Production configuration still contains placeholder values. Update Llm:BaseUrl before starting the API.");
+}
+
 var allowedOriginsCsv = builder.Configuration["AllowedOrigins"] ?? "";
 var allowedOrigins = allowedOriginsCsv.Split(',', StringSplitOptions.RemoveEmptyEntries)
                                     .Select(o => o.Trim())
@@ -63,28 +75,38 @@ builder.Services.AddCors(options =>
 builder.Services.AddAuthentication("Bearer")
     .AddJwtBearer("Bearer", options =>
     {
-        var jwtOptions = builder.Configuration.GetSection("Jwt");
+        var jwtConfig = builder.Configuration.GetSection("Jwt");
         options.TokenValidationParameters = new TokenValidationParameters
         {
             ValidateIssuer = true,
             ValidateAudience = true,
             ValidateLifetime = true,
             ValidateIssuerSigningKey = true,
-            ValidIssuer = jwtOptions["Issuer"],
-            ValidAudience = jwtOptions["Audience"],
+            ValidIssuer = jwtConfig["Issuer"],
+            ValidAudience = jwtConfig["Audience"],
             IssuerSigningKey = new SymmetricSecurityKey(
-                System.Text.Encoding.UTF8.GetBytes(jwtOptions["Secret"] ?? string.Empty))
+                System.Text.Encoding.UTF8.GetBytes(jwtConfig["Secret"] ?? string.Empty))
         };
     });
 
-builder.Services.AddAuthorization();
+builder.Services.AddAuthorization(options =>
+{
+    options.AddPolicy("HrAdmin", policy =>
+        policy.RequireRole("HR", "Admin"));
+});
+
+builder.Services.AddSingleton<HrManagement.Api.Logging.AuditLogger>();
 
 // Health Checks
-var dbConnectionString = builder.Configuration.GetConnectionString("HrDatabase") ?? string.Empty;
-builder.Services.AddHealthChecks()
+var dbConnectionString = builder.Configuration.GetConnectionString("HrDatabase");
+var healthChecks = builder.Services.AddHealthChecks()
     .AddCheck("self", () => HealthCheckResult.Healthy())
-    .AddNpgSql(dbConnectionString, name: "postgresql")
     .AddCheck("ready", () => HealthCheckResult.Healthy(), tags: new[] { "ready" });
+
+if (!string.IsNullOrWhiteSpace(dbConnectionString))
+{
+    healthChecks.AddNpgSql(dbConnectionString, name: "postgresql");
+}
 
 var llmBaseUrl = builder.Configuration["Llm:BaseUrl"];
 if (!string.IsNullOrEmpty(llmBaseUrl))
@@ -134,6 +156,21 @@ if (app.Environment.IsDevelopment())
 
 // Global middleware
 app.UseMiddleware<HrManagement.Api.Middleware.ExceptionHandlingMiddleware>();
+
+// Request correlation and tracing
+app.Use(async (context, next) =>
+{
+    var correlationId = context.Request.Headers.TryGetValue("X-Correlation-ID", out var existing)
+        ? existing.ToString()
+        : Guid.NewGuid().ToString("N");
+
+    context.Items["CorrelationId"] = correlationId;
+    context.Response.Headers["X-Correlation-ID"] = correlationId;
+    using (LogContext.PushProperty("CorrelationId", correlationId))
+    {
+        await next();
+    }
+});
 
 // Response compression
 app.UseResponseCompression();
@@ -203,3 +240,7 @@ app.UseIpRateLimiting();
 app.MapControllers();
 
 app.Run();
+
+public partial class Program
+{
+}

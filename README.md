@@ -24,6 +24,19 @@ src/
     Controllers/
     Dockerfile
 docker-compose.yml
+docs/
+  architecture-notes.md
+  change-log.md
+  onboarding-guide.md
+  operations-runbook.md
+  security-checklist.md
+  release-checklist.md
+tests/
+  HrManagement.Domain.Tests/
+scripts/
+  preflight-check.ps1
+  run-tests.ps1
+  start-dev.ps1
 ```
 
 ## Implemented Endpoints
@@ -34,6 +47,24 @@ docker-compose.yml
 - `GET|POST /api/departments`, `GET|PUT|DELETE /api/departments/{id}`
 - `GET|POST /api/roles`, `GET|PUT|DELETE /api/roles/{id}`
 - `GET|POST /api/leave-requests`, `POST /api/leave-requests/{id}/approve`, `POST /api/leave-requests/{id}/reject`
+
+## Testing
+
+Run the initial domain test suite with:
+
+```bash
+dotnet test tests/HrManagement.Domain.Tests/HrManagement.Domain.Tests.csproj
+```
+
+The project now includes a starter xUnit test project to protect core domain behavior and make future changes safer.
+
+Convenience scripts:
+
+```powershell
+./scripts/preflight-check.ps1
+./scripts/run-tests.ps1
+./scripts/start-dev.ps1
+```
 
 ## Local LLM
 
@@ -142,6 +173,7 @@ docker push your-registry/hr-management-api:latest
   ```
 - **Cloud storage**: Set `BACKUP_S3_BUCKET` in `.env` to auto-upload backups.
 - **Quarterly restore test**: Run restore procedure monthly (documented above).
+- **Operational backup drill**: Run `bash ./scripts/verify-backup-restore.sh` to validate the backup archive and restore path in a non-production environment.
 
 ## CI/CD Pipeline
 
@@ -185,6 +217,15 @@ Configure the following repository secrets for the workflow:
 - TLS termination via Traefik reverse proxy with Let's Encrypt.
 - Secrets out of source control (`.env` ignored).
 - Automated dependency scanning (Dependabot / GitHub code scanning) – enable in repo settings.
+
+## Operational Guidance
+
+- Architecture overview: [docs/architecture-notes.md](docs/architecture-notes.md)
+- Change log: [docs/change-log.md](docs/change-log.md)
+- New contributor onboarding: [docs/onboarding-guide.md](docs/onboarding-guide.md)
+- Deployment, rollback, and incident steps: [docs/operations-runbook.md](docs/operations-runbook.md)
+- Security and compliance checklist: [docs/security-checklist.md](docs/security-checklist.md)
+- Release checklist: [docs/release-checklist.md](docs/release-checklist.md)
 
 ## Extending the API
 

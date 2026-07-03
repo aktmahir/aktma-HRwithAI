@@ -1,3 +1,4 @@
+using HrManagement.Api.Logging;
 using HrManagement.Application.Abstractions.Persistence;
 using HrManagement.Domain.Employees;
 using Microsoft.AspNetCore.Authorization;
@@ -7,10 +8,11 @@ namespace HrManagement.Api.Controllers;
 
 [ApiController]
 [Route("api/roles")]
-[Authorize]
+[Authorize(Policy = "HrAdmin")]
 public sealed class RolesController(
     IRepository<Role> roles,
-    IUnitOfWork unitOfWork) : ControllerBase
+    IUnitOfWork unitOfWork,
+    AuditLogger auditLogger) : ControllerBase
 {
     [HttpGet]
     public async Task<ActionResult<IReadOnlyList<Role>>> GetAll(CancellationToken cancellationToken)
@@ -32,6 +34,7 @@ public sealed class RolesController(
         await roles.AddAsync(role, cancellationToken);
         await unitOfWork.SaveChangesAsync(cancellationToken);
 
+        auditLogger.LogChange("Create", "Role", User.Identity?.Name, $"Created role {role.Id}");
         return CreatedAtAction(nameof(GetById), new { id = role.Id }, role);
     }
 
@@ -46,6 +49,8 @@ public sealed class RolesController(
 
         role.Rename(request.Title);
         await unitOfWork.SaveChangesAsync(cancellationToken);
+
+        auditLogger.LogChange("Update", "Role", User.Identity?.Name, $"Updated role {role.Id}");
         return NoContent();
     }
 
@@ -60,8 +65,10 @@ public sealed class RolesController(
 
         roles.Remove(role);
         await unitOfWork.SaveChangesAsync(cancellationToken);
+
+        auditLogger.LogChange("Delete", "Role", User.Identity?.Name, $"Deleted role {role.Id}");
         return NoContent();
     }
 }
 
-public sealed record CreateRoleRequest(string Title);
+public sealed record CreateRoleRequest([System.ComponentModel.DataAnnotations.Required, System.ComponentModel.DataAnnotations.MinLength(2)] string Title);

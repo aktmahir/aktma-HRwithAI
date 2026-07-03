@@ -1,0 +1,30 @@
+name: Quality Gate
+
+on:
+  pull_request:
+    branches: [ main ]
+  workflow_dispatch:
+
+jobs:
+  quality-gate:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+          cache: true
+
+      - name: Restore dependencies
+        run: dotnet restore HrManagement.slnx
+
+      - name: Build
+        run: dotnet build HrManagement.slnx --configuration Release --no-restore
+
+      - name: Test
+        run: |
+          dotnet test tests/HrManagement.Domain.Tests/HrManagement.Domain.Tests.csproj --configuration Release --no-build --verbosity minimal
+          dotnet test tests/HrManagement.Api.Tests/HrManagement.Api.Tests.csproj --configuration Release --no-build --verbosity minimal

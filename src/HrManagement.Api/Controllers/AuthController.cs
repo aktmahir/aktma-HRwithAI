@@ -38,7 +38,8 @@ public sealed class AuthController : ControllerBase
         {
             new System.Security.Claims.Claim(System.IdentityModel.Tokens.Jwt.JwtRegisteredClaimNames.Sub, request.Username),
             new System.Security.Claims.Claim(System.IdentityModel.Tokens.Jwt.JwtRegisteredClaimNames.Jti, Guid.NewGuid().ToString()),
-            new System.Security.Claims.Claim(System.Security.Claims.ClaimTypes.Name, request.Username)
+            new System.Security.Claims.Claim(System.Security.Claims.ClaimTypes.Name, request.Username),
+            new System.Security.Claims.Claim(System.Security.Claims.ClaimTypes.Role, "HR")
         };
 
         var token = new System.IdentityModel.Tokens.Jwt.JwtSecurityToken(

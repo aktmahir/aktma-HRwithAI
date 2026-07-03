@@ -51,6 +51,12 @@ public sealed class ExceptionHandlingMiddleware(
             Instance = context.Request.Path
         };
 
+        var correlationId = context.Items["CorrelationId"] as string;
+        if (!string.IsNullOrWhiteSpace(correlationId))
+        {
+            context.Response.Headers["X-Correlation-ID"] = correlationId;
+        }
+
         context.Response.StatusCode = statusCode;
         context.Response.ContentType = "application/problem+json";
         await context.Response.WriteAsync(JsonSerializer.Serialize(problem, SerializerOptions));

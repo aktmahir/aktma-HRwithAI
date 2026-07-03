@@ -1,3 +1,4 @@
+using HrManagement.Api.Logging;
 using HrManagement.Application.Abstractions.Persistence;
 using HrManagement.Application.LeaveRequests;
 using HrManagement.Domain.Leave;
@@ -12,7 +13,8 @@ namespace HrManagement.Api.Controllers;
 [Authorize]
 public sealed class LeaveRequestsController(
     IRepository<LeaveRequest> leaveRequests,
-    ISender sender) : ControllerBase
+    ISender sender,
+    AuditLogger auditLogger) : ControllerBase
 {
     [HttpGet]
     public async Task<ActionResult<IReadOnlyList<LeaveRequest>>> GetAll(CancellationToken cancellationToken)
@@ -36,6 +38,7 @@ public sealed class LeaveRequestsController(
             new CreateLeaveRequestCommand(request.EmployeeId, request.StartDate, request.EndDate, request.Reason),
             cancellationToken);
 
+        auditLogger.LogChange("Create", "LeaveRequest", User.Identity?.Name, $"Submitted leave request {leaveRequest.Id}");
         return CreatedAtAction(nameof(GetById), new { id = leaveRequest.Id }, leaveRequest);
     }
 
@@ -46,6 +49,8 @@ public sealed class LeaveRequestsController(
         CancellationToken cancellationToken)
     {
         await sender.Send(new ApproveLeaveRequestCommand(id, request.ReviewerEmployeeId, request.Notes), cancellationToken);
+
+        auditLogger.LogChange("Approve", "LeaveRequest", User.Identity?.Name, $"Approved leave request {id}");
         return NoContent();
     }
 
@@ -56,6 +61,8 @@ public sealed class LeaveRequestsController(
         CancellationToken cancellationToken)
     {
         await sender.Send(new RejectLeaveRequestCommand(id, request.ReviewerEmployeeId, request.Notes), cancellationToken);
+
+        auditLogger.LogChange("Reject", "LeaveRequest", User.Identity?.Name, $"Rejected leave request {id}");
         return NoContent();
     }
 }

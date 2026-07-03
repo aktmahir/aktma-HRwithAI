@@ -1,3 +1,4 @@
+using HrManagement.Api.Logging;
 using HrManagement.Application.Abstractions.Persistence;
 using HrManagement.Domain.Employees;
 using Microsoft.AspNetCore.Authorization;
@@ -7,10 +8,11 @@ namespace HrManagement.Api.Controllers;
 
 [ApiController]
 [Route("api/departments")]
-[Authorize]
+[Authorize(Policy = "HrAdmin")]
 public sealed class DepartmentsController(
     IRepository<Department> departments,
-    IUnitOfWork unitOfWork) : ControllerBase
+    IUnitOfWork unitOfWork,
+    AuditLogger auditLogger) : ControllerBase
 {
     [HttpGet]
     public async Task<ActionResult<IReadOnlyList<Department>>> GetAll(CancellationToken cancellationToken)
@@ -34,6 +36,7 @@ public sealed class DepartmentsController(
         await departments.AddAsync(department, cancellationToken);
         await unitOfWork.SaveChangesAsync(cancellationToken);
 
+        auditLogger.LogChange("Create", "Department", User.Identity?.Name, $"Created department {department.Name}");
         return CreatedAtAction(nameof(GetById), new { id = department.Id }, department);
     }
 
@@ -48,6 +51,8 @@ public sealed class DepartmentsController(
 
         department.Rename(request.Name);
         await unitOfWork.SaveChangesAsync(cancellationToken);
+
+        auditLogger.LogChange("Update", "Department", User.Identity?.Name, $"Updated department {department.Id}");
         return NoContent();
     }
 
@@ -62,8 +67,10 @@ public sealed class DepartmentsController(
 
         departments.Remove(department);
         await unitOfWork.SaveChangesAsync(cancellationToken);
+
+        auditLogger.LogChange("Delete", "Department", User.Identity?.Name, $"Deleted department {department.Id}");
         return NoContent();
     }
 }
 
-public sealed record CreateDepartmentRequest(string Name);
+public sealed record CreateDepartmentRequest([System.ComponentModel.DataAnnotations.Required, System.ComponentModel.DataAnnotations.MinLength(2)] string Name);

@@ -27,13 +27,15 @@ jobs:
           cache: true
 
       - name: Restore dependencies
-        run: dotnet restore src/HrManagement.Api/HrManagement.Api.csproj
+        run: dotnet restore HrManagement.slnx
 
       - name: Build
-        run: dotnet build src/HrManagement.Api/HrManagement.Api.csproj --configuration Release --no-restore
+        run: dotnet build HrManagement.slnx --configuration Release --no-restore
 
       - name: Run tests
-        run: dotnet test src/HrManagement.Api/HrManagement.Api.csproj --configuration Release --no-build --verbosity normal
+        run: |
+          dotnet test tests/HrManagement.Domain.Tests/HrManagement.Domain.Tests.csproj --configuration Release --no-build --verbosity normal
+          dotnet test tests/HrManagement.Api.Tests/HrManagement.Api.Tests.csproj --configuration Release --no-build --verbosity normal
 
       - name: Run static analysis
         run: |
@@ -151,6 +153,16 @@ jobs:
       - name: Verify deployment
         run: |
           kubectl rollout status deployment/hr-management-api --namespace=hr-management-staging --timeout=120s
+      - name: Rollback on failure
+        if: failure()
+        run: |
+          echo "Deployment to production failed. Rolling back to previous revision." 
+          kubectl rollout undo deployment/hr-management-api --namespace=hr-management-prod || true
+      - name: Rollback on failure
+        if: failure()
+        run: |
+          echo "Deployment to staging failed. Rolling back to previous revision." 
+          kubectl rollout undo deployment/hr-management-api --namespace=hr-management-staging || true
 
   deploy-production:
     needs: deploy-staging

@@ -1,7 +1,8 @@
 #!/bin/bash
-set -e
+set -euo pipefail
 
-BACKUP_DIR="${BACKUP_DIR:-/backups}"
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+BACKUP_DIR="${BACKUP_DIR:-$SCRIPT_DIR/backups}"
 TIMESTAMP=$(date +%Y%m%d_%H%M%S)
 BACKUP_FILE="${BACKUP_DIR}/hr_management_${TIMESTAMP}.sql.gz"
 
