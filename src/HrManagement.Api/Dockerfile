@@ -1,5 +1,5 @@
 # Use alpine for smaller base image (~100MB vs ~250MB)
-FROM mcr.microsoft.com/dotnet/aspnet:8.0-alpine AS base
+FROM mcr.microsoft.com/dotnet/aspnet:10.0-alpine AS base
 # Install curl for healthcheck, ca-certificates for HTTPS, and tzdata for time zone support
 RUN apk add --no-cache curl ca-certificates tzdata
 WORKDIR /app
@@ -10,7 +10,7 @@ EXPOSE 8080
 HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 CMD curl -f http://localhost:8080/health || exit 1
 
 # Build stage uses SDK image
-FROM mcr.microsoft.com/dotnet/sdk:8.0-alpine AS build
+FROM mcr.microsoft.com/dotnet/sdk:10.0-alpine AS build
 WORKDIR /src
 COPY ["src/HrManagement.Domain/HrManagement.Domain.csproj", "src/HrManagement.Domain/"]
 COPY ["src/HrManagement.Application/HrManagement.Application.csproj", "src/HrManagement.Application/"]

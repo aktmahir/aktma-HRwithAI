@@ -9,10 +9,17 @@ namespace HrManagement.Infrastructure.DataRetention;
 public sealed class DataRetentionWorker(
     HrDbContext dbContext,
     IOptions<DataRetentionOptions> options,
-    ILogger<DataRetentionWorker> logger) : BackgroundService
+    ILogger<DataRetentionWorker> logger,
+    IHostEnvironment environment) : BackgroundService
 {
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
+        if (environment.IsEnvironment("Test"))
+        {
+            logger.LogInformation("DataRetentionWorker is disabled in the Test environment.");
+            return;
+        }
+
         logger.LogInformation(
             "DataRetentionWorker started. CompletedLeaveRequestsRetentionDays={CompletedLeaveRequestsRetentionDays}, EnableArchiving={EnableArchiving}, EnablePurging={EnablePurging}",
             options.Value.CompletedLeaveRequestsRetentionDays,

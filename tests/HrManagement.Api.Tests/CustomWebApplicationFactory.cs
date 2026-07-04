@@ -20,11 +20,10 @@ public sealed class CustomWebApplicationFactory : WebApplicationFactory<Program>
 
         builder.ConfigureServices(services =>
         {
-            services.RemoveAll(typeof(DbContextOptions<HrDbContext>));
-            services.RemoveAll(typeof(HrDbContext));
-
-            services.AddDbContext<HrDbContext>(options =>
+            services.AddDbContext<HrManagement.Infrastructure.Persistence.HrDbContext>(options =>
                 options.UseInMemoryDatabase("HrManagementTests"));
+
+            services.AddSingleton<HrManagement.Infrastructure.Persistence.DatabaseInitializer>();
 
             services.AddAuthentication("TestScheme")
                 .AddScheme<AuthenticationSchemeOptions, TestAuthHandler>("TestScheme", _ => { });

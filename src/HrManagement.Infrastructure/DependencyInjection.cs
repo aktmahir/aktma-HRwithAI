@@ -19,14 +19,22 @@ public static class DependencyInjection
         this IServiceCollection services,
         IConfiguration configuration)
     {
-        services.AddDbContext<HrDbContext>(options =>
-            options.UseNpgsql(configuration.GetConnectionString("HrDatabase"), npgsqlOptions =>
+        var environment = configuration["ASPNETCORE_ENVIRONMENT"];
+        if (!string.Equals(environment, "Test", StringComparison.OrdinalIgnoreCase))
+        {
+            var connectionString = configuration.GetConnectionString("HrDatabase");
+            if (!string.IsNullOrWhiteSpace(connectionString))
             {
-                npgsqlOptions.EnableRetryOnFailure(
-                    maxRetryCount: 5,
-                    maxRetryDelay: TimeSpan.FromSeconds(10),
-                    errorCodesToAdd: null);
-            }));
+                services.AddDbContext<HrDbContext>(options =>
+                    options.UseNpgsql(connectionString, npgsqlOptions =>
+                    {
+                        npgsqlOptions.EnableRetryOnFailure(
+                            maxRetryCount: 5,
+                            maxRetryDelay: TimeSpan.FromSeconds(10),
+                            errorCodesToAdd: null);
+                    }));
+            }
+        }
 
         services.Configure<DatabaseOptions>(configuration.GetSection(DatabaseOptions.SectionName));
         services.AddSingleton<DatabaseInitializer>();
