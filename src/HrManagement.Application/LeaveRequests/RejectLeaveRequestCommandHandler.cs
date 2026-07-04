@@ -1,3 +1,4 @@
+using HrManagement.Application.Abstractions.Notifications;
 using HrManagement.Application.Abstractions.Persistence;
 using HrManagement.Application.Common.Exceptions;
 using HrManagement.Domain.Leave;
@@ -7,7 +8,8 @@ namespace HrManagement.Application.LeaveRequests;
 
 public sealed class RejectLeaveRequestCommandHandler(
     IRepository<LeaveRequest> leaveRequests,
-    IUnitOfWork unitOfWork) : IRequestHandler<RejectLeaveRequestCommand>
+    IUnitOfWork unitOfWork,
+    IEmailService emailService) : IRequestHandler<RejectLeaveRequestCommand>
 {
     public async Task Handle(RejectLeaveRequestCommand request, CancellationToken cancellationToken)
     {
@@ -16,5 +18,19 @@ public sealed class RejectLeaveRequestCommandHandler(
 
         leaveRequest.Reject(request.ReviewerEmployeeId, request.Notes);
         await unitOfWork.SaveChangesAsync(cancellationToken);
+
+        _ = Task.Run(async () =>
+        {
+            try
+            {
+                await emailService.SendAsync(
+                    to: "hr@example.com",
+                    subject: $"Leave Request Rejected - {request.LeaveRequestId}",
+                    body: $"Leave request {request.LeaveRequestId} has been rejected by {request.ReviewerEmployeeId}.");
+            }
+            catch
+            {
+            }
+        }, cancellationToken);
     }
 }

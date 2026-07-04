@@ -1,6 +1,9 @@
 using HrManagement.Application.Abstractions.Ai;
+using HrManagement.Application.Abstractions.Notifications;
 using HrManagement.Application.Abstractions.Persistence;
 using HrManagement.Infrastructure.Ai;
+using HrManagement.Infrastructure.DataRetention;
+using HrManagement.Infrastructure.Notifications;
 using HrManagement.Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
@@ -17,12 +20,25 @@ public static class DependencyInjection
         IConfiguration configuration)
     {
         services.AddDbContext<HrDbContext>(options =>
-            options.UseNpgsql(configuration.GetConnectionString("HrDatabase")));
+            options.UseNpgsql(configuration.GetConnectionString("HrDatabase"), npgsqlOptions =>
+            {
+                npgsqlOptions.EnableRetryOnFailure(
+                    maxRetryCount: 5,
+                    maxRetryDelay: TimeSpan.FromSeconds(10),
+                    errorCodesToAdd: null);
+            }));
 
         services.Configure<DatabaseOptions>(configuration.GetSection(DatabaseOptions.SectionName));
         services.AddSingleton<DatabaseInitializer>();
         services.AddScoped(typeof(IRepository<>), typeof(EfRepository<>));
         services.AddScoped<IUnitOfWork, UnitOfWork>();
+        services.AddScoped<IUserRepository, UserRepository>();
+        services.AddSingleton<IPasswordHasher, PasswordHasher>();
+        services.AddScoped<IRefreshTokenRepository, RefreshTokenRepository>();
+        services.AddScoped<IAuditLogRepository, AuditLogRepository>();
+
+        services.AddScoped<IEmailService, NoOpEmailService>();
+        services.Configure<SmtpEmailOptions>(configuration.GetSection(SmtpEmailOptions.SectionName));
 
         services.Configure<LlmOptions>(configuration.GetSection(LlmOptions.SectionName));
         services.AddHttpClient<ILlmService, OllamaLlmService>(client =>
@@ -33,7 +49,7 @@ public static class DependencyInjection
         })
         .AddPolicyHandler(GetRetryPolicy());
 
-        services.AddDataRetention();
+        services.AddDataRetention(configuration);
 
         return services;
     }

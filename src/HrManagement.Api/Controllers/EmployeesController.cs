@@ -1,6 +1,9 @@
+using System.ComponentModel.DataAnnotations;
 using HrManagement.Api.Logging;
+using HrManagement.Application.Abstractions.Pagination;
 using HrManagement.Application.Abstractions.Persistence;
 using HrManagement.Domain.Employees;
+using HrManagement.Infrastructure.Metrics;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
@@ -15,17 +18,27 @@ public sealed class EmployeesController(
     AuditLogger auditLogger) : ControllerBase
 {
     [HttpGet]
-    public async Task<ActionResult<IReadOnlyList<Employee>>> GetAll([FromQuery] int page = 1, [FromQuery] int pageSize = 50, CancellationToken cancellationToken = default)
+    [ProducesResponseType(typeof(PagedResult<Employee>), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
+    public async Task<ActionResult<PagedResult<Employee>>> GetAll([FromQuery] int page = 1, [FromQuery] int pageSize = 50, CancellationToken cancellationToken = default)
     {
         if (page < 1) page = 1;
         if (pageSize < 1) pageSize = 50;
         if (pageSize > 200) pageSize = 200;
 
-        var result = await employees.ListPagedAsync(page, pageSize, cancellationToken);
+        var items = await employees.ListPagedAsync(page, pageSize, cancellationToken);
+        var totalCount = await employees.CountAsync(cancellationToken);
+        var result = PagedResult<Employee>.Create(items, totalCount, page, pageSize);
+
         return Ok(result);
     }
 
     [HttpGet("{id:guid}")]
+    [ProducesResponseType(typeof(Employee), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<ActionResult<Employee>> GetById(Guid id, CancellationToken cancellationToken)
     {
         var employee = await employees.GetByIdAsync(id, cancellationToken);
@@ -33,6 +46,10 @@ public sealed class EmployeesController(
     }
 
     [HttpPost]
+    [ProducesResponseType(typeof(Employee), StatusCodes.Status201Created)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
     public async Task<ActionResult<Employee>> Create(
         [FromBody] CreateEmployeeRequest request,
         CancellationToken cancellationToken)
@@ -47,11 +64,17 @@ public sealed class EmployeesController(
         await employees.AddAsync(employee, cancellationToken);
         await unitOfWork.SaveChangesAsync(cancellationToken);
 
-        auditLogger.LogChange("Create", "Employee", User.Identity?.Name, $"Created employee {employee.Id}");
+        await auditLogger.LogChangeAsync("Create", "Employee", User.Identity?.Name, $"Created employee {employee.Id}");
+        BusinessMetrics.EmployeesCreated.Inc();
         return CreatedAtAction(nameof(GetById), new { id = employee.Id }, employee);
     }
 
     [HttpPut("{id:guid}")]
+    [ProducesResponseType(StatusCodes.Status204NoContent)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<IActionResult> Update(Guid id, [FromBody] UpdateEmployeeRequest request, CancellationToken cancellationToken)
     {
         var employee = await employees.GetByIdAsync(id, cancellationToken);
@@ -67,11 +90,16 @@ public sealed class EmployeesController(
 
         await unitOfWork.SaveChangesAsync(cancellationToken);
 
-        auditLogger.LogChange("Update", "Employee", User.Identity?.Name, $"Updated employee {employee.Id}");
+        await auditLogger.LogChangeAsync("Update", "Employee", User.Identity?.Name, $"Updated employee {employee.Id}");
+        BusinessMetrics.EmployeesUpdated.Inc();
         return NoContent();
     }
 
     [HttpDelete("{id:guid}")]
+    [ProducesResponseType(StatusCodes.Status204NoContent)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<IActionResult> Delete(Guid id, CancellationToken cancellationToken)
     {
         var employee = await employees.GetByIdAsync(id, cancellationToken);
@@ -83,21 +111,22 @@ public sealed class EmployeesController(
         employees.Remove(employee);
         await unitOfWork.SaveChangesAsync(cancellationToken);
 
-        auditLogger.LogChange("Delete", "Employee", User.Identity?.Name, $"Deleted employee {employee.Id}");
+        await auditLogger.LogChangeAsync("Delete", "Employee", User.Identity?.Name, $"Deleted employee {employee.Id}");
+        BusinessMetrics.EmployeesDeleted.Inc();
         return NoContent();
     }
 }
 
 public sealed record CreateEmployeeRequest(
-    string FirstName,
-    string LastName,
-    string Email,
-    Guid DepartmentId,
-    Guid RoleId);
+    [Required] [StringLength(80)] string FirstName,
+    [Required] [StringLength(80)] string LastName,
+    [Required] [EmailAddress] [StringLength(254)] string Email,
+    [Required] Guid DepartmentId,
+    [Required] Guid RoleId);
 
 public sealed record UpdateEmployeeRequest(
-    string FirstName,
-    string LastName,
-    string Email,
-    Guid DepartmentId,
-    Guid RoleId);
+    [Required] [StringLength(80)] string FirstName,
+    [Required] [StringLength(80)] string LastName,
+    [Required] [EmailAddress] [StringLength(254)] string Email,
+    [Required] Guid DepartmentId,
+    [Required] Guid RoleId);

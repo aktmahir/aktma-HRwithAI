@@ -1,5 +1,6 @@
 using HrManagement.Application.Abstractions.Ai;
 using HrManagement.Application.CvScreening;
+using HrManagement.Infrastructure.Metrics;
 using MediatR;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
@@ -15,6 +16,7 @@ public sealed class CvScreeningController(ISender sender) : ControllerBase
     private const int MaxJobDescriptionLength = 50_000;
 
     [HttpPost]
+    [RequestSizeLimit(1 * 1024 * 1024)]
     [ProducesResponseType(typeof(CvScreeningResult), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     public async Task<ActionResult<CvScreeningResult>> ScreenCv(
@@ -41,8 +43,17 @@ public sealed class CvScreeningController(ISender sender) : ControllerBase
             return BadRequest($"Job description exceeds maximum length of {MaxJobDescriptionLength} characters.");
         }
 
-        var result = await sender.Send(new ScreenCvCommand(request.CvText, request.JobDescription), cancellationToken);
-        return Ok(result);
+        try
+        {
+            var result = await sender.Send(new ScreenCvCommand(request.CvText, request.JobDescription), cancellationToken);
+            BusinessMetrics.AiCvScreeningCompleted.WithLabels("success").Inc();
+            return Ok(result);
+        }
+        catch
+        {
+            BusinessMetrics.AiCvScreeningCompleted.WithLabels("failure").Inc();
+            throw;
+        }
     }
 }
 

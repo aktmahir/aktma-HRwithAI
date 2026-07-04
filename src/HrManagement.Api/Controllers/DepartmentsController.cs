@@ -15,6 +15,9 @@ public sealed class DepartmentsController(
     AuditLogger auditLogger) : ControllerBase
 {
     [HttpGet]
+    [ProducesResponseType(typeof(IReadOnlyList<Department>), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
     public async Task<ActionResult<IReadOnlyList<Department>>> GetAll([FromQuery] int page = 1, [FromQuery] int pageSize = 50, CancellationToken cancellationToken = default)
     {
         if (page < 1) page = 1;
@@ -26,6 +29,10 @@ public sealed class DepartmentsController(
     }
 
     [HttpGet("{id:guid}")]
+    [ProducesResponseType(typeof(Department), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<ActionResult<Department>> GetById(Guid id, CancellationToken cancellationToken)
     {
         var department = await departments.GetByIdAsync(id, cancellationToken);
@@ -33,6 +40,10 @@ public sealed class DepartmentsController(
     }
 
     [HttpPost]
+    [ProducesResponseType(typeof(Department), StatusCodes.Status201Created)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
     public async Task<ActionResult<Department>> Create(
         [FromBody] CreateDepartmentRequest request,
         CancellationToken cancellationToken)
@@ -41,11 +52,16 @@ public sealed class DepartmentsController(
         await departments.AddAsync(department, cancellationToken);
         await unitOfWork.SaveChangesAsync(cancellationToken);
 
-        auditLogger.LogChange("Create", "Department", User.Identity?.Name, $"Created department {department.Name}");
+        await auditLogger.LogChangeAsync("Create", "Department", User.Identity?.Name, $"Created department {department.Name}");
         return CreatedAtAction(nameof(GetById), new { id = department.Id }, department);
     }
 
     [HttpPut("{id:guid}")]
+    [ProducesResponseType(StatusCodes.Status204NoContent)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<IActionResult> Update(Guid id, [FromBody] CreateDepartmentRequest request, CancellationToken cancellationToken)
     {
         var department = await departments.GetByIdAsync(id, cancellationToken);
@@ -57,11 +73,15 @@ public sealed class DepartmentsController(
         department.Rename(request.Name);
         await unitOfWork.SaveChangesAsync(cancellationToken);
 
-        auditLogger.LogChange("Update", "Department", User.Identity?.Name, $"Updated department {department.Id}");
+        await auditLogger.LogChangeAsync("Update", "Department", User.Identity?.Name, $"Updated department {department.Id}");
         return NoContent();
     }
 
     [HttpDelete("{id:guid}")]
+    [ProducesResponseType(StatusCodes.Status204NoContent)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<IActionResult> Delete(Guid id, CancellationToken cancellationToken)
     {
         var department = await departments.GetByIdAsync(id, cancellationToken);
@@ -73,7 +93,7 @@ public sealed class DepartmentsController(
         departments.Remove(department);
         await unitOfWork.SaveChangesAsync(cancellationToken);
 
-        auditLogger.LogChange("Delete", "Department", User.Identity?.Name, $"Deleted department {department.Id}");
+        await auditLogger.LogChangeAsync("Delete", "Department", User.Identity?.Name, $"Deleted department {department.Id}");
         return NoContent();
     }
 }

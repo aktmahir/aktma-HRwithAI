@@ -13,5 +13,12 @@ public sealed class LeaveRequestConfiguration : IEntityTypeConfiguration<LeaveRe
         builder.Property(request => request.Reason).HasMaxLength(500).IsRequired();
         builder.Property(request => request.Status).HasConversion<string>().HasMaxLength(32).IsRequired();
         builder.Property(request => request.ReviewNotes).HasMaxLength(500);
+
+        builder.HasIndex(request => request.EmployeeId);
+        builder.HasIndex(request => request.Status);
+        builder.HasIndex(request => request.StartDate);
+        builder.HasIndex(request => request.EndDate);
+        builder.HasIndex(request => new { request.EmployeeId, request.Status });
+        builder.HasIndex(request => request.CreatedAt);
     }
 }

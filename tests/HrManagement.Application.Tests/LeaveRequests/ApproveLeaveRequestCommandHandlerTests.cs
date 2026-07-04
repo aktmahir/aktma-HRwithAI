@@ -1,5 +1,6 @@
 using HrManagement.Application.LeaveRequests;
 using HrManagement.Application.Abstractions.Persistence;
+using HrManagement.Application.Abstractions.Notifications;
 using HrManagement.Application.Common.Exceptions;
 using HrManagement.Domain.Leave;
 using Moq;
@@ -18,7 +19,7 @@ public class ApproveLeaveRequestCommandHandlerTests
         var reviewerId = Guid.NewGuid();
 
         leaveRequestRepository.Setup(r => r.GetByIdAsync(leaveRequest.Id, default)).ReturnsAsync(leaveRequest);
-        var handler = new ApproveLeaveRequestCommandHandler(leaveRequestRepository.Object, unitOfWork.Object);
+        var handler = new ApproveLeaveRequestCommandHandler(leaveRequestRepository.Object, unitOfWork.Object, Mock.Of<IEmailService>());
         var command = new ApproveLeaveRequestCommand(leaveRequest.Id, reviewerId, "Approved");
 
         await handler.Handle(command, default);
@@ -35,7 +36,7 @@ public class ApproveLeaveRequestCommandHandlerTests
         var leaveRequestRepository = new Mock<IRepository<LeaveRequest>>();
         var unitOfWork = new Mock<IUnitOfWork>();
         leaveRequestRepository.Setup(r => r.GetByIdAsync(It.IsAny<Guid>(), default)).ReturnsAsync((LeaveRequest?)null);
-        var handler = new ApproveLeaveRequestCommandHandler(leaveRequestRepository.Object, unitOfWork.Object);
+        var handler = new ApproveLeaveRequestCommandHandler(leaveRequestRepository.Object, unitOfWork.Object, Mock.Of<IEmailService>());
         var command = new ApproveLeaveRequestCommand(Guid.NewGuid(), Guid.NewGuid(), "Approved");
 
         await Assert.ThrowsAsync<NotFoundException>(() => handler.Handle(command, default));

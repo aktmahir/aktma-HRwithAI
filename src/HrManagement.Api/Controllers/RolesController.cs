@@ -15,6 +15,9 @@ public sealed class RolesController(
     AuditLogger auditLogger) : ControllerBase
 {
     [HttpGet]
+    [ProducesResponseType(typeof(IReadOnlyList<Role>), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
     public async Task<ActionResult<IReadOnlyList<Role>>> GetAll([FromQuery] int page = 1, [FromQuery] int pageSize = 50, CancellationToken cancellationToken = default)
     {
         if (page < 1) page = 1;
@@ -26,6 +29,10 @@ public sealed class RolesController(
     }
 
     [HttpGet("{id:guid}")]
+    [ProducesResponseType(typeof(Role), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<ActionResult<Role>> GetById(Guid id, CancellationToken cancellationToken)
     {
         var role = await roles.GetByIdAsync(id, cancellationToken);
@@ -33,17 +40,26 @@ public sealed class RolesController(
     }
 
     [HttpPost]
+    [ProducesResponseType(typeof(Role), StatusCodes.Status201Created)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
     public async Task<ActionResult<Role>> Create([FromBody] CreateRoleRequest request, CancellationToken cancellationToken)
     {
         var role = new Role(request.Title);
         await roles.AddAsync(role, cancellationToken);
         await unitOfWork.SaveChangesAsync(cancellationToken);
 
-        auditLogger.LogChange("Create", "Role", User.Identity?.Name, $"Created role {role.Id}");
+        await auditLogger.LogChangeAsync("Create", "Role", User.Identity?.Name, $"Created role {role.Id}");
         return CreatedAtAction(nameof(GetById), new { id = role.Id }, role);
     }
 
     [HttpPut("{id:guid}")]
+    [ProducesResponseType(StatusCodes.Status204NoContent)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<IActionResult> Update(Guid id, [FromBody] CreateRoleRequest request, CancellationToken cancellationToken)
     {
         var role = await roles.GetByIdAsync(id, cancellationToken);
@@ -55,11 +71,15 @@ public sealed class RolesController(
         role.Rename(request.Title);
         await unitOfWork.SaveChangesAsync(cancellationToken);
 
-        auditLogger.LogChange("Update", "Role", User.Identity?.Name, $"Updated role {role.Id}");
+        await auditLogger.LogChangeAsync("Update", "Role", User.Identity?.Name, $"Updated role {role.Id}");
         return NoContent();
     }
 
     [HttpDelete("{id:guid}")]
+    [ProducesResponseType(StatusCodes.Status204NoContent)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<IActionResult> Delete(Guid id, CancellationToken cancellationToken)
     {
         var role = await roles.GetByIdAsync(id, cancellationToken);
@@ -71,7 +91,7 @@ public sealed class RolesController(
         roles.Remove(role);
         await unitOfWork.SaveChangesAsync(cancellationToken);
 
-        auditLogger.LogChange("Delete", "Role", User.Identity?.Name, $"Deleted role {role.Id}");
+        await auditLogger.LogChangeAsync("Delete", "Role", User.Identity?.Name, $"Deleted role {role.Id}");
         return NoContent();
     }
 }

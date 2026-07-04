@@ -1,6 +1,7 @@
 using HrManagement.Application.CvScreening;
 using HrManagement.Application.Common.Exceptions;
 using HrManagement.Application.Abstractions.Ai;
+using HrManagement.Application.Abstractions.Notifications;
 using Moq;
 using Xunit;
 
@@ -12,7 +13,7 @@ public class ScreenCvCommandHandlerTests
     public async Task Handle_ShouldThrowValidationException_WhenCvTextIsEmpty()
     {
         // Arrange
-        var handler = new ScreenCvCommandHandler(Mock.Of<ILlmService>());
+        var handler = new ScreenCvCommandHandler(Mock.Of<ILlmService>(), Mock.Of<IEmailService>());
         var command = new ScreenCvCommand(string.Empty, "Some job description");
 
         // Act & Assert
@@ -23,7 +24,7 @@ public class ScreenCvCommandHandlerTests
     public async Task Handle_ShouldThrowValidationException_WhenJobDescriptionIsEmpty()
     {
         // Arrange
-        var handler = new ScreenCvCommandHandler(Mock.Of<ILlmService>());
+        var handler = new ScreenCvCommandHandler(Mock.Of<ILlmService>(), Mock.Of<IEmailService>());
         var command = new ScreenCvCommand("Some cv text", string.Empty);
 
         // Act & Assert
@@ -35,7 +36,7 @@ public class ScreenCvCommandHandlerTests
     {
         // Arrange
         var mockLlmService = new Mock<ILlmService>();
-        var handler = new ScreenCvCommandHandler(mockLlmService.Object);
+        var handler = new ScreenCvCommandHandler(mockLlmService.Object, Mock.Of<IEmailService>());
         var command = new ScreenCvCommand("CV text", "Job description");
 
         // Act

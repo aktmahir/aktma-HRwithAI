@@ -1,7 +1,10 @@
+using System.ComponentModel.DataAnnotations;
 using HrManagement.Api.Logging;
+using HrManagement.Application.Abstractions.Pagination;
 using HrManagement.Application.Abstractions.Persistence;
 using HrManagement.Application.LeaveRequests;
 using HrManagement.Domain.Leave;
+using HrManagement.Infrastructure.Metrics;
 using MediatR;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
@@ -10,14 +13,17 @@ namespace HrManagement.Api.Controllers;
 
 [ApiController]
 [Route("api/leave-requests")]
-[Authorize]
+[Authorize(Policy = "HrAdmin")]
 public sealed class LeaveRequestsController(
     IRepository<LeaveRequest> leaveRequests,
     ISender sender,
     AuditLogger auditLogger) : ControllerBase
 {
     [HttpGet]
-    public async Task<ActionResult<IReadOnlyList<LeaveRequest>>> GetAll(
+    [ProducesResponseType(typeof(PagedResult<LeaveRequest>), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
+    public async Task<ActionResult<PagedResult<LeaveRequest>>> GetAll(
         [FromQuery] Guid? employeeId = null,
         [FromQuery] DateOnly? startDate = null,
         [FromQuery] DateOnly? endDate = null,
@@ -52,11 +58,18 @@ public sealed class LeaveRequestsController(
             results = results.Where(r => r.Status == status.Value).ToList();
         }
 
+        var totalCount = results.Count;
         var paged = results.Skip((page - 1) * pageSize).Take(pageSize).ToList();
-        return Ok(paged);
+        var pagedResult = HrManagement.Application.Abstractions.Pagination.PagedResult<LeaveRequest>.Create(paged, totalCount, page, pageSize);
+
+        return Ok(pagedResult);
     }
 
     [HttpGet("{id:guid}")]
+    [ProducesResponseType(typeof(LeaveRequest), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<ActionResult<LeaveRequest>> GetById(Guid id, CancellationToken cancellationToken)
     {
         var leaveRequest = await leaveRequests.GetByIdAsync(id, cancellationToken);
@@ -64,6 +77,10 @@ public sealed class LeaveRequestsController(
     }
 
     [HttpPost]
+    [ProducesResponseType(typeof(LeaveRequest), StatusCodes.Status201Created)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
     public async Task<ActionResult<LeaveRequest>> Create(
         [FromBody] CreateLeaveRequest request,
         CancellationToken cancellationToken)
@@ -72,11 +89,17 @@ public sealed class LeaveRequestsController(
             new CreateLeaveRequestCommand(request.EmployeeId, request.StartDate, request.EndDate, request.Reason),
             cancellationToken);
 
-        auditLogger.LogChange("Create", "LeaveRequest", User.Identity?.Name, $"Submitted leave request {leaveRequest.Id}");
+        await auditLogger.LogChangeAsync("Create", "LeaveRequest", User.Identity?.Name, $"Submitted leave request {leaveRequest.Id}");
+        BusinessMetrics.LeaveRequestsCreated.WithLabels(leaveRequest.EmployeeId.ToString()).Inc();
         return CreatedAtAction(nameof(GetById), new { id = leaveRequest.Id }, leaveRequest);
     }
 
     [HttpPost("{id:guid}/approve")]
+    [ProducesResponseType(StatusCodes.Status204NoContent)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<IActionResult> Approve(
         Guid id,
         [FromBody] ReviewLeaveRequest request,
@@ -84,11 +107,17 @@ public sealed class LeaveRequestsController(
     {
         await sender.Send(new ApproveLeaveRequestCommand(id, request.ReviewerEmployeeId, request.Notes), cancellationToken);
 
-        auditLogger.LogChange("Approve", "LeaveRequest", User.Identity?.Name, $"Approved leave request {id}");
+        await auditLogger.LogChangeAsync("Approve", "LeaveRequest", User.Identity?.Name, $"Approved leave request {id}");
+        BusinessMetrics.LeaveRequestsApproved.WithLabels(request.ReviewerEmployeeId.ToString()).Inc();
         return NoContent();
     }
 
     [HttpPost("{id:guid}/reject")]
+    [ProducesResponseType(StatusCodes.Status204NoContent)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<IActionResult> Reject(
         Guid id,
         [FromBody] ReviewLeaveRequest request,
@@ -96,11 +125,18 @@ public sealed class LeaveRequestsController(
     {
         await sender.Send(new RejectLeaveRequestCommand(id, request.ReviewerEmployeeId, request.Notes), cancellationToken);
 
-        auditLogger.LogChange("Reject", "LeaveRequest", User.Identity?.Name, $"Rejected leave request {id}");
+        await auditLogger.LogChangeAsync("Reject", "LeaveRequest", User.Identity?.Name, $"Rejected leave request {id}");
+        BusinessMetrics.LeaveRequestsRejected.WithLabels(request.ReviewerEmployeeId.ToString()).Inc();
         return NoContent();
     }
 }
 
-public sealed record CreateLeaveRequest(Guid EmployeeId, DateOnly StartDate, DateOnly EndDate, string Reason);
+public sealed record CreateLeaveRequest(
+    [Required] Guid EmployeeId,
+    [Required] DateOnly StartDate,
+    [Required] DateOnly EndDate,
+    [Required] [StringLength(500)] string Reason);
 
-public sealed record ReviewLeaveRequest(Guid ReviewerEmployeeId, string? Notes);
+public sealed record ReviewLeaveRequest(
+    [Required] Guid ReviewerEmployeeId,
+    [StringLength(500)] string? Notes);

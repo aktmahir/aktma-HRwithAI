@@ -7,4 +7,6 @@ public sealed class JwtOptions
     public string Audience { get; init; } = string.Empty;
     public string Secret { get; init; } = string.Empty;
     public int ExpiryMinutes { get; init; } = 60;
+    public int RefreshTokenExpiryDays { get; init; } = 7;
+    public int RefreshTokenRollingExpiryMinutes { get; init; } = 60;
 }

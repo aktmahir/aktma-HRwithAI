@@ -27,8 +27,31 @@ spec:
                 secretKeyRef:
                   name: hr-management-secrets
                   key: connection-string
+            - name: Jwt__Secret
+              valueFrom:
+                secretKeyRef:
+                  name: hr-management-secrets
+                  key: jwt-secret
+            - name: Jwt__Issuer
+              value: "https://api.yourdomain.com"
+            - name: Jwt__Audience
+              value: "hr-management-api"
+            - name: Jwt__ExpiryMinutes
+              value: "1440"
+            - name: Jwt__RefreshTokenExpiryDays
+              value: "7"
+            - name: Jwt__RefreshTokenRollingExpiryMinutes
+              value: "60"
+            - name: DEFAULT_ADMIN_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: hr-management-secrets
+                  key: default-admin-password
             - name: Llm__BaseUrl
-              value: "http://ollama-service:11434"
+              valueFrom:
+                secretKeyRef:
+                  name: hr-management-secrets
+                  key: llm-base-url
           readinessProbe:
             httpGet:
               path: /ready

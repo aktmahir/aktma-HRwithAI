@@ -1,5 +1,6 @@
 using HrManagement.Application.Abstractions.Ai;
 using HrManagement.Application.PerformanceReviews;
+using HrManagement.Infrastructure.Metrics;
 using MediatR;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
@@ -14,6 +15,7 @@ public sealed class PerformanceReviewAnalysisController(ISender sender) : Contro
     private const int MaxReviewTextLength = 50_000;
 
     [HttpPost]
+    [RequestSizeLimit(1 * 1024 * 1024)]
     [ProducesResponseType(typeof(PerformanceReviewAnalysisResult), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     public async Task<ActionResult<PerformanceReviewAnalysisResult>> Analyze(
@@ -30,8 +32,17 @@ public sealed class PerformanceReviewAnalysisController(ISender sender) : Contro
             return BadRequest($"Review text exceeds maximum length of {MaxReviewTextLength} characters.");
         }
 
-        var result = await sender.Send(new AnalyzePerformanceReviewCommand(request.ReviewText), cancellationToken);
-        return Ok(result);
+        try
+        {
+            var result = await sender.Send(new AnalyzePerformanceReviewCommand(request.ReviewText), cancellationToken);
+            BusinessMetrics.AiPerformanceReviewAnalyzed.WithLabels("success").Inc();
+            return Ok(result);
+        }
+        catch
+        {
+            BusinessMetrics.AiPerformanceReviewAnalyzed.WithLabels("failure").Inc();
+            throw;
+        }
     }
 }
 

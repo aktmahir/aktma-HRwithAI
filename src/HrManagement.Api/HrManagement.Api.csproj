@@ -37,11 +37,6 @@
     <PackageReference Include="Serilog.Formatting.Elasticsearch" Version="10.0.0" />
     <!-- Authentication -->
     <PackageReference Include="Microsoft.AspNetCore.Authentication.JwtBearer" Version="8.0.0" />
-    <!-- OpenTelemetry Metrics (commented out - requires package version resolution) -->
-    <!-- PackageReference Include="OpenTelemetry.Extensions.Hosting" Version="1.8.0" /-->
-    <!-- PackageReference Include="OpenTelemetry.Instrumentation.AspNetCore" Version="1.8.0" /-->
-    <!-- PackageReference Include="OpenTelemetry.Instrumentation.Http" Version="1.8.0" /-->
-    <!-- PackageReference Include="OpenTelemetry.Exporter.Prometheus.AspNetCore" Version="1.8.0-beta.1" /-->
     <!-- Prometheus Metrics -->
     <PackageReference Include="prometheus-net" Version="8.0.1" />
     <PackageReference Include="prometheus-net.AspNetCore" Version="8.0.1" />

@@ -29,6 +29,11 @@ public sealed class EfRepository<TEntity>(HrDbContext dbContext) : IRepository<T
             .ToListAsync(cancellationToken);
     }
 
+    public Task<int> CountAsync(CancellationToken cancellationToken = default)
+    {
+        return dbContext.Set<TEntity>().CountAsync(cancellationToken);
+    }
+
     public Task AddAsync(TEntity entity, CancellationToken cancellationToken = default)
     {
         return dbContext.Set<TEntity>().AddAsync(entity, cancellationToken).AsTask();

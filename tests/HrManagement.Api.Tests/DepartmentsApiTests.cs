@@ -3,7 +3,10 @@ using System.Net.Http.Headers;
 using System.Net.Http.Json;
 using HrManagement.Api.Controllers;
 using HrManagement.Api.Logging;
+using HrManagement.Application.Abstractions.Persistence;
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
+using Moq;
 using Xunit;
 
 namespace HrManagement.Api.Tests;
@@ -79,13 +82,14 @@ public sealed class DepartmentsApiTests : IClassFixture<CustomWebApplicationFact
     }
 
     [Fact]
-    public void AuditLogger_WritesStructuredMessage()
+    public async Task AuditLogger_WritesStructuredMessage()
     {
         var provider = new TestLoggerProvider();
         using var loggerFactory = LoggerFactory.Create(builder => builder.AddProvider(provider));
-        var auditLogger = new AuditLogger(new Logger<AuditLogger>(loggerFactory));
+        var auditLogRepository = new Mock<IAuditLogRepository>();
+        var auditLogger = new AuditLogger(new Logger<AuditLogger>(loggerFactory), auditLogRepository.Object);
 
-        auditLogger.LogChange("Create", "Employee", "test-user", "Created employee");
+        await auditLogger.LogChangeAsync("Create", "Employee", "test-user", "Created employee");
 
         var entry = Assert.Single(provider.Messages);
         Assert.Contains("Create", entry);

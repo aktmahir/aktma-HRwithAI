@@ -1,5 +1,6 @@
 using HrManagement.Application.LeaveRequests;
 using HrManagement.Application.Abstractions.Persistence;
+using HrManagement.Application.Abstractions.Notifications;
 using HrManagement.Domain.Leave;
 using Moq;
 using Xunit;
@@ -14,7 +15,7 @@ public class CreateLeaveRequestCommandHandlerTests
         // Arrange
         var leaveRequestRepository = new Mock<IRepository<LeaveRequest>>();
         var unitOfWork = new Mock<IUnitOfWork>();
-        var handler = new CreateLeaveRequestCommandHandler(leaveRequestRepository.Object, unitOfWork.Object);
+        var handler = new CreateLeaveRequestCommandHandler(leaveRequestRepository.Object, unitOfWork.Object, Mock.Of<IEmailService>());
         var command = new CreateLeaveRequestCommand(Guid.NewGuid(), new DateOnly(2026, 1, 1), new DateOnly(2026, 1, 5), "Vacation");
 
         // Act

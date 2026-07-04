@@ -1,3 +1,5 @@
+using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.Mvc.ApiExplorer;
 using AspNetCoreRateLimit;
 using HrManagement.Application;
 using HrManagement.Infrastructure;
@@ -21,6 +23,14 @@ builder.Host.UseSerilog();
 
 // Add services to the container.
 builder.Services.AddControllers();
+builder.Services.Configure<ApiBehaviorOptions>(options =>
+{
+    options.InvalidModelStateResponseFactory = context =>
+    {
+        var problemDetails = new ValidationProblemDetails(context.ModelState);
+        return new BadRequestObjectResult(problemDetails);
+    };
+});
 
 // Response Compression
 builder.Services.AddResponseCompression(options =>
@@ -99,7 +109,7 @@ builder.Services.AddAuthorization(options =>
         policy.RequireRole("HR", "Admin"));
 });
 
-builder.Services.AddSingleton<HrManagement.Api.Logging.AuditLogger>();
+builder.Services.AddScoped<HrManagement.Api.Logging.AuditLogger>();
 
 // Health Checks
 var dbConnectionString = builder.Configuration.GetConnectionString("HrDatabase");
