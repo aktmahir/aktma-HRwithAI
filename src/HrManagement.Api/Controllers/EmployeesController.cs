@@ -15,9 +15,14 @@ public sealed class EmployeesController(
     AuditLogger auditLogger) : ControllerBase
 {
     [HttpGet]
-    public async Task<ActionResult<IReadOnlyList<Employee>>> GetAll(CancellationToken cancellationToken)
+    public async Task<ActionResult<IReadOnlyList<Employee>>> GetAll([FromQuery] int page = 1, [FromQuery] int pageSize = 50, CancellationToken cancellationToken = default)
     {
-        return Ok(await employees.ListAsync(cancellationToken));
+        if (page < 1) page = 1;
+        if (pageSize < 1) pageSize = 50;
+        if (pageSize > 200) pageSize = 200;
+
+        var result = await employees.ListPagedAsync(page, pageSize, cancellationToken);
+        return Ok(result);
     }
 
     [HttpGet("{id:guid}")]

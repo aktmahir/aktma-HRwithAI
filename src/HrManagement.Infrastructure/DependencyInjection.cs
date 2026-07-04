@@ -33,6 +33,8 @@ public static class DependencyInjection
         })
         .AddPolicyHandler(GetRetryPolicy());
 
+        services.AddDataRetention();
+
         return services;
     }
 

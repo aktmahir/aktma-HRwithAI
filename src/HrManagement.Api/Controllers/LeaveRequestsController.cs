@@ -17,9 +17,43 @@ public sealed class LeaveRequestsController(
     AuditLogger auditLogger) : ControllerBase
 {
     [HttpGet]
-    public async Task<ActionResult<IReadOnlyList<LeaveRequest>>> GetAll(CancellationToken cancellationToken)
+    public async Task<ActionResult<IReadOnlyList<LeaveRequest>>> GetAll(
+        [FromQuery] Guid? employeeId = null,
+        [FromQuery] DateOnly? startDate = null,
+        [FromQuery] DateOnly? endDate = null,
+        [FromQuery] LeaveRequestStatus? status = null,
+        [FromQuery] int page = 1,
+        [FromQuery] int pageSize = 50,
+        CancellationToken cancellationToken = default)
     {
-        return Ok(await leaveRequests.ListAsync(cancellationToken));
+        if (page < 1) page = 1;
+        if (pageSize < 1) pageSize = 50;
+        if (pageSize > 200) pageSize = 200;
+
+        var results = await leaveRequests.ListAsync(cancellationToken);
+
+        if (employeeId.HasValue && employeeId.Value != Guid.Empty)
+        {
+            results = results.Where(r => r.EmployeeId == employeeId.Value).ToList();
+        }
+
+        if (startDate.HasValue)
+        {
+            results = results.Where(r => r.StartDate >= startDate.Value).ToList();
+        }
+
+        if (endDate.HasValue)
+        {
+            results = results.Where(r => r.EndDate <= endDate.Value).ToList();
+        }
+
+        if (status.HasValue)
+        {
+            results = results.Where(r => r.Status == status.Value).ToList();
+        }
+
+        var paged = results.Skip((page - 1) * pageSize).Take(pageSize).ToList();
+        return Ok(paged);
     }
 
     [HttpGet("{id:guid}")]

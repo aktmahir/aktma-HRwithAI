@@ -16,6 +16,19 @@ public sealed class EfRepository<TEntity>(HrDbContext dbContext) : IRepository<T
         return await dbContext.Set<TEntity>().AsNoTracking().ToListAsync(cancellationToken);
     }
 
+    public async Task<IReadOnlyList<TEntity>> ListPagedAsync(int page, int pageSize, CancellationToken cancellationToken = default)
+    {
+        if (page < 1) page = 1;
+        if (pageSize < 1) pageSize = 50;
+        if (pageSize > 200) pageSize = 200;
+
+        return await dbContext.Set<TEntity>()
+            .AsNoTracking()
+            .Skip((page - 1) * pageSize)
+            .Take(pageSize)
+            .ToListAsync(cancellationToken);
+    }
+
     public Task AddAsync(TEntity entity, CancellationToken cancellationToken = default)
     {
         return dbContext.Set<TEntity>().AddAsync(entity, cancellationToken).AsTask();

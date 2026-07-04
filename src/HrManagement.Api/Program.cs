@@ -5,6 +5,7 @@ using Microsoft.AspNetCore.ResponseCompression;
 using Microsoft.AspNetCore.Mvc.Versioning;
 using Microsoft.Extensions.Diagnostics.HealthChecks;
 using Microsoft.IdentityModel.Tokens;
+using Prometheus;
 using Serilog;
 using Serilog.Context;
 
@@ -41,9 +42,12 @@ builder.Services.AddApiVersioning(options =>
 builder.Services.Configure<HrManagement.Api.JwtOptions>(builder.Configuration.GetSection("Jwt"));
 
 var jwtOptions = builder.Configuration.GetSection("Jwt").Get<HrManagement.Api.JwtOptions>() ?? new HrManagement.Api.JwtOptions();
-if (string.IsNullOrWhiteSpace(jwtOptions.Secret) || string.IsNullOrWhiteSpace(jwtOptions.Issuer) || string.IsNullOrWhiteSpace(jwtOptions.Audience))
+if (!builder.Environment.IsEnvironment("Test"))
 {
-    throw new InvalidOperationException("JWT configuration is incomplete. Set Jwt:Secret, Jwt:Issuer, and Jwt:Audience before starting the API.");
+    if (string.IsNullOrWhiteSpace(jwtOptions.Secret) || string.IsNullOrWhiteSpace(jwtOptions.Issuer) || string.IsNullOrWhiteSpace(jwtOptions.Audience))
+    {
+        throw new InvalidOperationException("JWT configuration is incomplete. Set Jwt:Secret, Jwt:Issuer, and Jwt:Audience before starting the API.");
+    }
 }
 
 if (builder.Environment.IsProduction() && (builder.Configuration["Llm:BaseUrl"] ?? string.Empty).Contains("yourdomain", StringComparison.OrdinalIgnoreCase))
@@ -137,6 +141,9 @@ builder.Services.AddSingleton<HrManagement.Infrastructure.Persistence.DatabaseIn
 
 var app = builder.Build();
 
+// Prometheus metrics middleware
+app.UseHttpMetrics();
+
 // Apply pending migrations on startup (only in non-dev environments if desired)
 await app.Services.GetRequiredService<HrManagement.Infrastructure.Persistence.DatabaseInitializer>().InitializeAsync();
 
@@ -217,27 +224,18 @@ app.MapHealthChecks("/health/llm", new Microsoft.AspNetCore.Diagnostics.HealthCh
     Predicate = check => check.Tags.Contains("llm")
 });
 
-// Simple Prometheus metrics endpoint
-app.MapGet("/metrics", () =>
-{
-    var process = System.Diagnostics.Process.GetCurrentProcess();
-    var metrics = new[]
-    {
-        "# HELP dotnet_process_memory_bytes Process memory in bytes",
-        "# TYPE dotnet_process_memory_bytes gauge",
-        $"dotnet_process_memory_bytes {process.WorkingSet64}",
-        "",
-        "# HELP dotnet_process_cpu_seconds_total CPU time in seconds",
-        "# TYPE dotnet_process_cpu_seconds_total counter",
-        $"dotnet_process_cpu_seconds_total {process.TotalProcessorTime.TotalSeconds}",
-    };
-    return Results.Ok(string.Join("\n", metrics));
-});
-
 // Rate limiting
 app.UseIpRateLimiting();
 
 app.MapControllers();
+app.MapMetrics();
+
+// Graceful shutdown: flush Serilog buffers and stop accepting new requests
+app.Lifetime.ApplicationStopping.Register(() =>
+{
+    Log.Information("Application is shutting down. Flushing logs...");
+    Serilog.Log.CloseAndFlush();
+});
 
 app.Run();
 

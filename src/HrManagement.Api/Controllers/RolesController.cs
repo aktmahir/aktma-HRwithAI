@@ -15,9 +15,14 @@ public sealed class RolesController(
     AuditLogger auditLogger) : ControllerBase
 {
     [HttpGet]
-    public async Task<ActionResult<IReadOnlyList<Role>>> GetAll(CancellationToken cancellationToken)
+    public async Task<ActionResult<IReadOnlyList<Role>>> GetAll([FromQuery] int page = 1, [FromQuery] int pageSize = 50, CancellationToken cancellationToken = default)
     {
-        return Ok(await roles.ListAsync(cancellationToken));
+        if (page < 1) page = 1;
+        if (pageSize < 1) pageSize = 50;
+        if (pageSize > 200) pageSize = 200;
+
+        var result = await roles.ListPagedAsync(page, pageSize, cancellationToken);
+        return Ok(result);
     }
 
     [HttpGet("{id:guid}")]

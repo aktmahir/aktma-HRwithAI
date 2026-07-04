@@ -16,6 +16,8 @@ src/
       Ai/
       Persistence/
     CvScreening/
+    LeaveRequests/
+    PerformanceReviews/
   HrManagement.Infrastructure/
     Ai/
     Persistence/
@@ -23,6 +25,7 @@ src/
   HrManagement.Api/
     Controllers/
     Dockerfile
+    appsettings.Test.json
 docker-compose.yml
 docs/
   architecture-notes.md
@@ -33,10 +36,19 @@ docs/
   release-checklist.md
 tests/
   HrManagement.Domain.Tests/
+  HrManagement.Application.Tests/
+  HrManagement.Infrastructure.Tests/
+  HrManagement.Api.Tests/
 scripts/
   preflight-check.ps1
   run-tests.ps1
   start-dev.ps1
+  verify-backup-restore.sh
+k8s/
+  deployment.yaml
+  namespace-prod.yaml
+  namespace-staging.yaml
+  service.yaml
 ```
 
 ## Implemented Endpoints
@@ -50,13 +62,26 @@ scripts/
 
 ## Testing
 
-Run the initial domain test suite with:
+Run the full test suite across all four test projects:
+
+```bash
+dotnet test HrManagement.slnx --configuration Release
+```
+
+Or run individual projects:
 
 ```bash
 dotnet test tests/HrManagement.Domain.Tests/HrManagement.Domain.Tests.csproj
+dotnet test tests/HrManagement.Application.Tests/HrManagement.Application.Tests.csproj
+dotnet test tests/HrManagement.Infrastructure.Tests/HrManagement.Infrastructure.Tests.csproj
+dotnet test tests/HrManagement.Api.Tests/HrManagement.Api.Tests.csproj
 ```
 
-The project now includes a starter xUnit test project to protect core domain behavior and make future changes safer.
+The solution includes xUnit + Moq tests protecting:
+- Domain entity behavior and state transitions
+- Application MediatR command handlers
+- Infrastructure repository and EF Core mappings
+- API controller behavior, authorization, and middleware
 
 Convenience scripts:
 
@@ -157,8 +182,10 @@ docker push your-registry/hr-management-api:latest
 
 - Liveness: `GET /health` (checks DB and LLM connectivity).
 - Readiness: `GET /ready` (app is ready to accept traffic).
-- Metrics: `GET /metrics` exposes basic Prometheus metrics (memory, CPU). Extend with OpenTelemetry for full instrumentation.
+- LLM health: `GET /health/llm` (non-blocking LLM provider check).
+- Metrics: `GET /metrics` exposes Prometheus metrics via `prometheus-net.AspNetCore` (process memory, CPU, and ASP.NET Core request metrics).
 - Logging: Serilog JSON format to `Logs/log-.json` (compact JSON) and console, 14-day rotation. Forward to ELK/Loki/Seq via log forwarder.
+- Graceful shutdown: The host flushes Serilog buffers on SIGTERM and drains in-flight requests before stopping.
 
 ### Database Backup & Restore
 
@@ -233,6 +260,19 @@ Configure the following repository secrets for the workflow:
 - Business logic goes in `src/HrManagement.Application/`.
 - Domain entities in `src/HrManagement.Domain/`.
 - Infrastructure implementations (EF Core, LLM client) in `src/HrManagement.Infrastructure/`.
+
+## API Behavior
+
+- List endpoints support pagination via `?page=1&pageSize=50` (max 200).
+- `GET /api/leave-requests` supports filtering via `?employeeId=`, `?startDate=`, `?endDate=`, `?status=Pending|Approved|Rejected`.
+- Audit logs redact email addresses before writing to Serilog sinks.
+
+## Data Retention
+
+- `LeaveRequest` records are immutable once reviewed.
+- `Employee` and `Department` records support soft updates via audit trail.
+- Deleted records are removed from the database immediately.
+- Configure automated archival or purging via a background hosted service as needed for compliance.
 
 ## License
 
